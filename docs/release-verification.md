@@ -116,7 +116,7 @@ they are measurements for the stated runtime, not general estimates.
 
 | Date (UTC) | Commit / notebook blob | Executor | Path exercised | Wall | Outcome |
 |---|---|---|---|---|---|
-__LOCAL_ROW__
+| 2026-09-14 | notebook blob `5fdc0e7bbcd7` (commit `3a09ba4`, generated at `48b8f86`; `NOTEBOOK_SOURCE.repository_revision` = `48b8f86…`) | Local Windows-venv harness (`run_nb_local.py`: nbclient 0.11.0, fresh `python3` kernel, `CUDA_VISIBLE_DEVICES=-1`, `DIMER_NOTEBOOK_CI_PREINSTALLED=1`), Python 3.12.10, torch 2.14.0+cu130, transformers 4.57.6 | Default synthetic path, all 8 code cells: pinned install skipped (pre-installed), `stage_missing_files` fetched all 8 manifest entries (896 MB, `pytorch_model.bin` among them, no `tf_model.h5`) from the Hub cache at the pinned revision into the scratch `weights/`, `verify_snapshot` PASS (8 files), no further download in the log, `validate_inputs` → `accepted` (3 images, 3 captions, 9 pairs, one recorded duplicate-caption rejection), one `score` call over the 3×3 grid (3.21 s, float32) → ITM diagonal 0.998 / 0.634 / 0.278 with off-diagonal ≤ 0.001 and cosine diagonal 0.495 / 0.422 / 0.441 (identical to the smoke run), `evaluation_report` `sample-sanity` with `recall_at_1` = 1.0 in both directions for both scores (chance 0.333), scene digests `f217010b…` / `3069e785…` / `7aa6fe00…`, 5 outputs written (JSON ×3, CSV, contact-sheet PNG) | 92.9 s | PASS — pre-flight only; not promotion evidence |
 
 ### Manual clean-runtime evidence
 
