@@ -1,0 +1,50 @@
+{
+  "format": "dimer_hf_snapshot",
+  "formatVersion": 1,
+  "modelKey": "blip-itm-base-coco",
+  "modelId": "Salesforce/blip-itm-base-coco",
+  "revision": "bed8ad38cb2d04a5a4bdf2d071b3c3c0a4aa724c",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 5492,
+      "sha256": "db2e7ff1e647bc42d8b0d4cd3653ad65c1d24b5559a153e6e6ea2f3c12edd978"
+    },
+    {
+      "path": "config.json",
+      "bytes": 4560,
+      "sha256": "3e6464c2ce7c54512ddb101c5e9a8e77f4c2d637be9e3d005667ccd4a34c6ef2"
+    },
+    {
+      "path": "preprocessor_config.json",
+      "bytes": 445,
+      "sha256": "0aa66e2e9ac3ea3b5cd4388c35072e22db4e1cc1f96c7872bed07749c712ade1"
+    },
+    {
+      "path": "pytorch_model.bin",
+      "bytes": 895139697,
+      "sha256": "017fb3e7f4e125f13a8a4717f1402dbe0d0bb877474b4a203db13a4447b0227f"
+    },
+    {
+      "path": "special_tokens_map.json",
+      "bytes": 125,
+      "sha256": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3"
+    },
+    {
+      "path": "tokenizer.json",
+      "bytes": 711396,
+      "sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66"
+    },
+    {
+      "path": "tokenizer_config.json",
+      "bytes": 456,
+      "sha256": "86da6fdb761b02f73a05561aba71711c2d7c205fe1fd1744046173a410263925"
+    },
+    {
+      "path": "vocab.txt",
+      "bytes": 231508,
+      "sha256": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3"
+    }
+  ],
+  "totalBytes": 896093679
+}
