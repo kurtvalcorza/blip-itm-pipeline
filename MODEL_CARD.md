@@ -2,6 +2,7 @@
 license: bsd-3-clause
 model_card_spec: "1.1"
 pipeline_tag: zero-shot-image-classification
+task: "Others - Image-Text Matching"
 base_model: Salesforce/blip-itm-base-coco
 date_published: "2022-12-12"
 date_published_source: "Hugging Face Hub repository creation date of the exact hosted checkpoint (`createdAt` 2022-12-12T17:53:18Z, https://huggingface.co/api/models/Salesforce/blip-itm-base-coco — the Transformers-format conversion; the Hub carries no pipeline tag for it and no canonical tag exists for image-text matching, so this card uses `zero-shot-image-classification`, the Hub task whose contract — rank caller-supplied texts against an image — this pipeline performs); the BLIP paper and original checkpoints are from 2022-01 (arXiv:2201.12086), and the pinned revision is the Hub's `main` as of 2026-09-14"
