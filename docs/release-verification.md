@@ -1,143 +1,162 @@
 # Release verification
 
-`tutorials/blip_itm_colab.ipynb` (`TASK-INFERENCE`, **standalone** carrier) is a
-**release candidate** until the exact notebook revision has executed top-to-bottom in a clean
-supported runtime. Unit tests, JSON validation, code-cell compilation, the generator parity checks
-and `tools/validate_release_assets.py` are necessary checks but are **not** runtime evidence under
-DIMER Notebook Specification 2.0. This file is the durable release-gate record for the notebook.
+`tutorials/blip_itm_colab.ipynb` (`E2E`, **standalone** carrier) is a **release candidate** until the
+exact notebook revision has executed top-to-bottom in a clean supported runtime. Unit tests, JSON validation,
+code-cell compilation, the generator parity checks and `tools/validate_release_assets.py` are necessary checks but
+are **not** runtime evidence under DIMER Notebook Specification 2.0 (REL8). This file is the durable release-gate
+record for the notebook.
 
 ## Automatic coverage (static, every pull request)
 
 CI runs `tools/validate_release_assets.py`, which checks:
 
-- notebook JSON parses; every code cell compiles as plain Python (no `%`/`!` magics); no
-  persisted outputs or execution counts; no unresolved placeholder markers; every code cell
-  is preceded by an explanatory markdown cell;
-- exactly one tutorial notebook, named in `tutorials/README.md` with its `TASK-INFERENCE`
-  profile, the notebook-spec version and the standalone carrier; `metadata.dimer` declares that
-  profile, spec `2.0`, a pedagogical mode, `standalone: true` and `generated_from` (repository, revision, module
-  SHA-256, generator);
-- the standalone carrier (ST1–ST6, PAR1–PAR3): no clone, repository install or repository import on
-  the primary path; exactly one cell tagged `embedded_module` equal to
-  `src/blip_itm_pipeline/pipeline.py` after the generator's documented rewrites; the
-  inline `MANIFEST` equal to the committed snapshot manifest and the inline `PINS` equal to the
-  `pyproject.toml` runtime pins; the notebook byte-identical (on LF) to `tools/build_notebook.py`
-  output for its recorded revision; the pinned-install cell with its restart-on-stale-import guard;
-  `NOTEBOOK_SOURCE` recorded in exports;
-- `MODEL_ID`/`MODEL_REVISION` are bound only in the carried module cell (and repeated in the inline
-  manifest, which the notebook asserts against the module before fetching), the revision is a 40-hex
-  immutable commit, and the same identity string appears in `README.md`, `MODEL_CARD.md`, and
-  `docs/WEIGHTS.md` with no stray revisions;
+- notebook JSON parses; every code cell compiles as plain Python (no `%`/`!` magics); no persisted outputs or
+  execution counts; no unresolved placeholder markers; every code cell is preceded by an explanatory markdown cell;
+- exactly one tutorial notebook, named in `tutorials/README.md` with its `E2E` profile, the notebook-spec version
+  and the standalone carrier; `metadata.dimer` declares that profile, spec `2.0`, a §3.3 pedagogical mode,
+  `standalone: true` and `generated_from` (repository, revision, module SHA-256, generator);
+- the standalone carrier (ST1–ST8, PAR1–PAR4): no clone, repository install or repository import on the primary
+  path; one cell per carried module (`pipeline.py`, `metrics.py`, `samples.py`), each equal to its source after the
+  generator's documented rewrites; the inline `MANIFEST` equal to the committed 8-entry snapshot manifest and the
+  inline `PINS` equal to the `pyproject.toml` runtime pins; the notebook byte-identical (on LF) to
+  `tools/build_notebook.py` output for its recorded revision; the pinned-install cell with its
+  restart-on-stale-import guard; `NOTEBOOK_SOURCE` recorded in exports;
+- `MODEL_ID`/`MODEL_REVISION` bound only in the carried module cell (and repeated in the inline manifest, which the
+  notebook asserts against the module before fetching), the revision a 40-hex immutable commit, and the same
+  identity string in `README.md`, `MODEL_CARD.md` and `docs/WEIGHTS.md` with no stray revisions (the pinned
+  VizWiz-Captions dataset revision is the one other 40-hex string allowed);
 - the profile-specific public-API calls (`stage_missing_files`, `verify_snapshot`,
-  `BlipItmPipeline.from_pretrained(weights_dir=...)`, `validate_inputs`, `score`, `evaluation_report`),
-  the ceiling print (`MIN_IMAGE_SIDE`, `MAX_IMAGE_SIDE`, `IMAGE_SIZE`, `MAX_IMAGES`, `MAX_TEXTS`,
-  `MAX_TEXT_CHARS`), the exports (including the executed-vs-hosted weight-file names), the learner-facing
-  statements (caller-owned caption set, neither score calibrated nor abstaining, the weight-format note,
-  recall@k needs a captioned set, `not-measurable` on BYOD, the caption set is part of the request,
-  capability exclusions) and the gated-off BYOD default listed in the validator; forbidden patterns
-  (credential-in-URL, any `git clone` / `github.com` / repository import on the primary path, a mutable
-  `revision='main'`, direct `from transformers import` / `BlipForImageTextRetrieval` / `BlipProcessor` /
-  `use_itm_head` / `weights_only=` / `from huggingface_hub import` use **outside the carried module
-  cell**, `trust_remote_code=True`, `pickle.load`, `torch.load(`, `extractall(`);
-- `STATUS.md`, `README.md` and `tutorials/README.md` agree on one release-status token and no
-  document makes an unsupported release-grade, production-readiness or benchmark claim;
-- `MODEL_CARD.md` front matter (`model_card_spec: "1.1"`), single H1, required heading order, and
-  immutable provenance.
+  `BlipItmPipeline.from_pretrained(weights_dir=...)`, `fetch_annotations` and `fetch_images` from the pinned
+  cache path, `build_sample_dataset(seed=SPLIT_SEED, image_paths=...)` / `load_byod_dataset`, `validate_dataset` per
+  split, `check_split_disjoint`, `gallery`, `write_dataset_jsonl`, the ceiling print, `validate_inputs` with the
+  duplicate-caption refusal probe, `pipe.score` with the sanity checks and the per-grid `evaluation_report` on the
+  drawn scenes, `chance_baseline`, `colour_keyword_baseline`, `pipe.evaluate` on the frozen model with
+  `rerank_top_k` and on the validation and test splits after adaptation with the rsum assertions, the per-category
+  breakdown, `pipe.adapt` with its explicit hyperparameters, `evaluation_report` on the grid after adaptation,
+  `pipe.save_artifact`, `BlipItmPipeline.from_artifact` and the reload-parity assertion, and the provenance fields
+  `weight_format`, `weight_sha256`, `hosted_tf_weight_file_not_loaded` and the `corpus` block with its gallery row
+  group), the six expected `outputs/` paths, the learner-facing statements (BSD-3-Clause weights, neither score
+  calibrated nor abstaining, adaptation with matching captions, the CC BY 4.0 corpus, the first two row groups, the
+  test gallery, the two non-neural baselines, recall@1/5/10, ITM pair accuracy, no dispersion estimate, the OCR
+  exclusion, the weight-format note) and the gated-off BYOD default; forbidden patterns (credential-in-URL, any
+  `git clone` / `github.com` / repository import on the primary path, a mutable `revision='main'`, direct
+  `from transformers import` / `BlipForImageTextRetrieval` / `BlipProcessor` / `text_encoder(` / `itm_head(` /
+  `from huggingface_hub import` / `get_hf_file_metadata` / `urllib.request` / `pyarrow` / `safetensors` /
+  `torch.optim` / `.backward(` / `pipe._model` / `extractall(` use **outside the carried module cells**,
+  `trust_remote_code=True`, `pickle.load`, `torch.load(` without `weights_only=True`, `extractall(`);
+- `STATUS.md`, `README.md` and `tutorials/README.md` agree on one release-status token and no document makes an
+  unsupported release-grade, production-readiness or benchmark claim;
+- `MODEL_CARD.md` front matter (`model_card_spec: "1.1"`), single H1, the 19 required headings in order, and the
+  immutable provenance section.
 
-CI also installs the pinned CPU-only torch wheel plus `transformers`, `safetensors`, `numpy` and
-`pillow`, runs `ruff check src tests tools`, `tools/build_notebook.py --check`, and the offline unit
-suite (`tests/test_pipeline.py`, `tests/test_role_helpers.py`, `tests/test_notebook_parity.py`;
-injected runner, no weights). These are source/provenance and unit checks. They are **not** execution
-evidence.
+CI also installs the pinned CPU-only torch wheel plus `transformers`, `safetensors`, `numpy`, `pillow`,
+`huggingface-hub` and `pyarrow`, runs `ruff check src tests tools`, `tools/build_notebook.py --check`, and the
+offline unit suite (`tests/test_pipeline.py`, `tests/test_adaptation.py`, `tests/test_role_helpers.py`,
+`tests/test_import_boundary.py`, `tests/test_notebook_parity.py`; injected runner, annotation and image fetchers,
+tiny PIL drawings, temporary manifests, no weights — `tests/test_model_backed.py` is skipped without the snapshot).
+These are source/provenance and unit checks. They are **not** execution evidence.
 
 ## Executor paths
 
 | Path | Runtime | Role |
 |---|---|---|
 | Google Colab (supported user path) | Colab CPU runtime (CUDA used automatically when present) | The runtime the tutorial is written for; a clean top-to-bottom run here is promotion evidence |
-| Kaggle CLI kernel | Kaggle CPU kernel, Python 3.12 image | Reproducible clean-room executor of the same class; the notebook is pushed verbatim plus one leading shim cell that provides `google.colab` and chdirs to a scratch directory (**no repository checkout is needed — the notebook is standalone**) |
-| Local Windows-venv harness (pre-flight only) | Workstation, sequential cell executor with a `google.colab` shim, `CUDA_VISIBLE_DEVICES=-1` | Builder pre-flight to catch defects before spending cloud runs; **not** a supported runtime and not promotion evidence |
+| Kaggle CLI kernel or equivalent fresh container | Fresh CPU or GPU container, Python 3.12 image; the committed notebook executed verbatim in a fresh interpreter with a `google.colab` shim and **no repository checkout** (the notebook is standalone) | Reproducible clean-room executor of the same class; promotion evidence |
+| Local harness (pre-flight only) | Workstation, sequential cell executor with a `google.colab` shim, pre-staged pins | Builder pre-flight to catch defects before spending cloud runs; **not** a supported runtime and **not** promotion evidence |
 
 ## Supported release verification procedure
 
 Before changing the registry status from `Candidate` to `Release-grade`:
 
 1. resolve the exact PR/commit head under review and confirm static CI is green;
-2. open that exact notebook revision in a new CPU (or CUDA) runtime (Colab, or the Kaggle
-   executor above) with **no repository checkout** and a clean model cache;
-3. run the notebook top-to-bottom without editing implementation cells (form parameters at their
-   defaults for the sample path: `USE_BYOD = False`);
-4. verify that Section 1 reports `NOTEBOOK_SOURCE.repository_revision` equal to the revision recorded
-   in `metadata.dimer.generated_from` and that the installed core package versions equal the inline
-   `PINS` (= `pyproject.toml`);
+2. open that exact notebook revision in a new CPU or CUDA runtime (Colab, or a fresh-container executor above) with
+   **no repository checkout**, an empty Hugging Face cache, and no pre-staged files under the working-directory
+   snapshot `weights/blip-itm-base-coco/` or the corpus cache `weights/vizwiz-captions/` (the standalone
+   path writes the manifest itself, stages the missing files from the Hub, reads the pinned VizWiz-Captions text
+   columns and the pinned row group of photographs from the Hub, so neither directory may be seeded);
+3. run the notebook top-to-bottom without editing implementation cells (form parameters at their defaults:
+   `USE_BYOD = False`, `SPLIT_SEED = 42`, `RERANK_TOP_K = 5`, `EPOCHS = 4`, `LEARNING_RATE = 2e-5`,
+   `BATCH_SIZE = 16`, `TRAINABLE_TEXT_LAYERS = 2`);
+4. verify that Section 1 reports `NOTEBOOK_SOURCE.repository_revision` equal to the revision recorded in
+   `metadata.dimer.generated_from` and that the installed core package versions equal the inline `PINS`
+   (= `pyproject.toml`): `torch==2.14.0`, `transformers==4.57.6`, `safetensors==0.8.0`, `numpy==2.5.3`,
+   `pillow==11.3.0`, `huggingface-hub==0.36.2`, `pyarrow==25.0.1` (an interpreter restart after the install is
+   expected where the runtime's preinstalled torch or numpy differ from the pins);
 5. verify every default-path stage completes:
    - pinned runtime installed from the inline `PINS` with no GitHub access;
-   - the carried module cell executes (defines `BlipItmPipeline`, `validate_inputs`,
-     `evaluation_report`, `recall_at_1`, `format_texts`, `verify_snapshot`, `stage_missing_files`) with no
-     import of the repository package;
-   - three synthetic cartoon scenes drawn in code with their RGB SHA-256 printed, three authored captions,
-     and the ceilings (`MIN_IMAGE_SIDE` 16, `MAX_IMAGE_SIDE` 4096, `IMAGE_SIZE` 384, `MAX_IMAGES` 16,
-     `MAX_TEXTS` 16, `MAX_TEXT_CHARS` 256) surfaced;
-   - pinned `Salesforce/blip-itm-base-coco` acquisition at the immutable revision through the carried
-     module: the inline `MANIFEST` is asserted against the module identity and written to
-     `weights/blip-itm-base-coco/`, `stage_missing_files(WEIGHTS_DIR, allow_download=True)` reports all 8
-     manifest entries on a clean runtime (`pytorch_model.bin` among them; `tf_model.h5` must not be
-     fetched), `verify_snapshot` returns its summary dict, and `from_pretrained(weights_dir=WEIGHTS_DIR)`
-     loads from the verified directory with no further Hub access (any download in the logs after
-     staging is a finding);
-   - `validate_inputs` writes `outputs/blip_itm_input_manifest.json` (verdict `accepted`, three inputs,
-     three captions, nine pairs, one recorded rejection finding from the duplicate-caption probe);
-   - one `score` call over the 3×3 grid; record the ITM probability and cosine grids (the card-pass CPU
-     smoke gave ITM diagonal 0.998 / 0.634 / 0.278 with off-diagonal ≤ 0.001 and cosine diagonal 0.495 /
-     0.422 / 0.441; a materially different result is a finding to record, not a failure by itself, because
-     no metric is asserted — kernels differ across devices);
-   - `evaluation_report` writes `outputs/blip_itm_evaluation_report.json` with verdict `sample-sanity`,
-     four `recall_at_1` entries (both directions × both scores) and the chance baselines on the synthetic
-     grid (`not-measurable` on BYOD), stated as such;
-   - `outputs/blip_itm_result.json`, `outputs/blip_itm_scores.csv` and `outputs/blip_itm_annotated.png`
-     written with `NOTEBOOK_SOURCE`, model revision, model licence, the executed and hosted weight-file
-     names, runtime versions and device;
+   - the three carried module cells execute (defining `BlipItmPipeline`, `verify_snapshot`, `stage_missing_files`,
+     `validate_inputs`, `evaluation_report`, `format_texts`, `recall_at_1`, `retrieval_metrics`, `gallery`,
+     `itm_pair_accuracy`, `chance_baseline`, `colour_keyword_baseline`, `fetch_annotations`, `fetch_images`,
+     `build_sample_dataset`, `validate_dataset`, `check_split_disjoint`, `split_dataset`, `load_byod_dataset`,
+     `write_dataset_jsonl`, `query_caption` and the ceilings) with no import of the repository package;
+   - the inline manifest asserted against the module's constants, then `stage_missing_files(WEIGHTS_DIR,
+     allow_download=True)` reporting all 8 manifest entries fetched from `Salesforce/blip-itm-base-coco` at the
+     immutable revision on a clean runtime, `verify_snapshot` returning its dict (8 files, the 895 MB pickle re-hashed
+     before `torch` is imported), and `from_pretrained(weights_dir=WEIGHTS_DIR)` loading from the verified directory
+     with `source` `local-snapshot`;
+   - Section 4: `fetch_annotations` checking the shard's declared size and SHA-256 against the pins, reading only
+     its four text columns (1,550 rows) and matching the pinned text digest `9799ebb1…`; `fetch_images` reading the
+     672 photographs of row groups 0 and 1 with every size and SHA-256 matching; the seeded split of the 318 captioned
+     row-group-0 photographs into 208 / 40 / 70 plus row group 1's 321 in the test split (391 records, 1,737 gallery
+     captions) with `check_split_disjoint` reporting no shared image, the category mix printed and the three
+     dataset digests; `outputs/…_train.jsonl` written; the four dataset refusal probes each raising `ValueError`;
+   - Section 5: the ceilings (`MIN_IMAGE_SIDE` 16, `MAX_IMAGE_SIDE` 4096, `IMAGE_SIZE` 384, `MAX_IMAGES` 16,
+     `MAX_TEXTS` 16, `MAX_TEXT_CHARS` 256, `MIN_RECORDS` 8, `MAX_RECORDS` 5000, `MIN_CAPTIONS` 1,
+     `MAX_CAPTION_CHARS` 256) surfaced; the three scenes drawn; `validate_inputs` writing
+     `outputs/…_input_manifest.json` (verdict `accepted`, one recorded rejection finding from the duplicate-caption
+     probe); `pipe.score` on the 3×3 grid with every sanity check `True` and the per-grid `evaluation_report`
+     verdict `sample-sanity` (recall@1 1.0 both ways in the card-pass smoke; a different ranking on another runtime is a
+     finding to record, not a failure);
+   - Section 6: the chance baseline (rsum ≈ 0.08), the colour-keyword baseline (≈ 0.13) and the frozen model's
+     gallery score (i2t R@1 ≈ 0.74, t2i R@1 ≈ 0.65, rsum ≈ 5.02, ITM-reranked i2t ≈ 0.80, pair accuracy ≈ 0.68 in
+     the build record on the RTX 5070 Ti) with the per-category breakdown, and the cell's assertion that the frozen
+     rsum is above both baselines;
+   - Section 7: `pipe.adapt` printing epoch 0 as the frozen model, 19,298,818 trainable of 223,744,258 parameters,
+     208 training photographs and 888 (photograph, caption) pairs, and a four-epoch history with validation rsum
+     moving by hundredths on a saturated 40-photograph gallery (5.816 frozen → 5.855 → 5.886 → 5.861 → 5.861 in the
+     build record; `best_epoch` 2);
+   - Section 8: `pipe.evaluate` on the validation and test splits with the four-way comparison on the six recalls
+     and rsum, the ITM re-ranking, the per-category breakdown and `outputs/…_evaluation_report.json` written (the
+     cell asserts the adapted test rsum exceeds the frozen one — on the build record 5.158 versus 5.023: i2t R@1
+     0.742 → 0.790, t2i R@1 0.651 → 0.672, ITM-reranked i2t 0.803 → 0.841, pair accuracy unchanged at 0.683);
+   - Section 9: the 3×3 grid re-scored by the adapted model with the `sample-sanity` report,
+     `outputs/…_scores.csv` written; `pipe.save_artifact` writing
+     `outputs/…_adapter/{adapter.safetensors,manifest.json}` (58 tensors, 77,202,384 bytes) and
+     `BlipItmPipeline.from_artifact` reloading it with 64/64 identical cosine scores on eight test photographs
+     against their query captions (the cell asserts it); `outputs/…_result.json` written with `NOTEBOOK_SOURCE`, the
+     model identity and licence, the snapshot block (`weight_format`, `weight_sha256`,
+     `hosted_tf_weight_file_not_loaded`), the `corpus` block, the inference-contract grids, the comparison, the
+     artifact digest, the reload parity, the runtime versions and device;
 6. verify the exports exist and the interpretation section matches the observed path;
-7. record the notebook Git blob id, commit, runtime (platform, Python, PyTorch, Transformers, device),
-   model identifier and immutable revision, whether the model cache was clean, outcome, produced
-   outputs, and any warning or applicable `SHOULD` deviation in the table below;
+7. record the notebook Git blob id, commit, runtime (platform, Python, PyTorch, Transformers, device), the model
+   identifier and immutable revision, whether the model cache, the weights directory and the corpus cache were clean,
+   outcome, produced outputs, the observed metrics (as observations, not a benchmark) and any warning or applicable
+   `SHOULD` deviation in the tables below;
 8. record no access tokens or other secrets.
 
-A known-failing default path in the supported runtime blocks release.
+A known-failing default path in the supported runtime blocks release (REL11).
+
+## Manual clean-runtime evidence
+
+| Notebook | Commit / notebook blob | Date (UTC) | Executor | Outcome |
+|---|---|---|---|---|
+| `blip_itm_colab.ipynb` (`E2E`) | `1f24a1d` / `6f1e02a3` | 2026-09-19 | Kaggle Tesla T4 (`kurtvalcorza/dimer-nb2-blip-itm` v2; image `torch 2.10.0+cu128` / `transformers 5.0.0` before the pinned install, `torch 2.14.0+cu130` / `transformers 4.57.6` after, Python 3.12.13, `cuda:0`) | **PASSED** — 11/11 code cells ok (1 restart after install cell); 691 files, 1063 MB staged from the Hub into a clean cache; comparison {i2t_recall_at_1: {chance: 0.003, neighbour: 0.008, frozen: 0.742, adapted: 0.79}, i2t_recall_at_5: {chance: 0.013, neighbour: 0.026, frozen: 0.905, adapted: 0.939}, i2t_recall_at_10: {chance: 0.025, neighbour: 0.043, frozen: 0.944, adapted: 0.962}, t2i_recall_at_1: {chance: 0.003, neighbour: 0.008, frozen: 0.652, adapted: 0.672}, t2i_recall_at_5: {chance: 0.013, neighbour: 0.017, frozen: 0.863, adapted: 0.877}, t2i_recall_at_10: {chance: 0.026, neighbour: 0.031, frozen: 0.918, adapted: 0.918}, rsum: {chance: 0.082, neighbour: 0.132, frozen: 5.024, adapted: 5.157}, itm: {itm_i2t_recall_at_1: {frozen: 0.803, adapted: 0.841}, itm_t2i_recall_at_1: {frozen: 0.708, adapted: 0.701}, itm_pair_accuracy: {frozen: 0.683, adapted: 0.683}}, median_rank: {frozen: [1, 1], adapted: [1, 1]}, delta_vs_frozen: {i2t_recall_at_1: 0.049, i2t_recall_at_5: 0.033, i2t_recall_at_10: 0.018, t2i_recall_at_1: 0.02, t2i_recall_at_5: 0.014, t2i_recall_at_10: 0.001, rsum: 0.134, itm_i2t_recall_at_1: 0.038, itm_t2i_recall_at_1: -0.008, itm_pair_accuracy: 0}, by_category: {no-text: {n: 160, frozen: [0.812, 0.775], adapted: [0.812, 0.786]}, text: {n: 231, frozen: [0.732, 0.628], adapted: [0.801, 0.643]}}}; reload parity {identical_scores: 64, of: 64}; run summary and executed notebook archived under `.agent/backups/kaggle-e2e-2026-09-19/out/dimer-nb2-blip-itm/v2/evidence/` in the workspace |
+| `blip_itm_colab.ipynb` (`TASK-INFERENCE`, superseded) | `2ccdea7` / `90b0268a87f0` | 2026-09-14 | Kaggle CPU (`kurtvalcorza/dimer-nb2-blip-itm` v1) | PASSED — 8/8 code cells, 265.2 s, 18 files, 896 MB staged; evidence for the earlier inference-only notebook, not for the `E2E` blob |
 
 ## Recorded executions
 
 Notebook identity is the Git blob id of `tutorials/blip_itm_colab.ipynb` (verify with
-`git rev-parse <commit>:tutorials/blip_itm_colab.ipynb`). Wall times, when recorded,
-are the sum of per-cell times reported by the executor and include installs and the model download;
-they are measurements for the stated runtime, not general estimates.
-
-### Local pre-flight evidence (not a supported runtime)
+`git rev-parse <commit>:tutorials/blip_itm_colab.ipynb`). Wall times, when recorded, are the sum of per-cell times
+reported by the executor and include installs and the model download; they are measurements for the stated
+runtime, not general estimates.
 
 | Date (UTC) | Commit / notebook blob | Executor | Path exercised | Wall | Outcome |
 |---|---|---|---|---|---|
-| 2026-09-14 | notebook blob `5fdc0e7bbcd7` (commit `3a09ba4`, generated at `48b8f86`; `NOTEBOOK_SOURCE.repository_revision` = `48b8f86…`) | Local Windows-venv harness (`run_nb_local.py`: nbclient 0.11.0, fresh `python3` kernel, `CUDA_VISIBLE_DEVICES=-1`, `DIMER_NOTEBOOK_CI_PREINSTALLED=1`), Python 3.12.10, torch 2.14.0+cu130, transformers 4.57.6 | Default synthetic path, all 8 code cells: pinned install skipped (pre-installed), `stage_missing_files` fetched all 8 manifest entries (896 MB, `pytorch_model.bin` among them, no `tf_model.h5`) from the Hub cache at the pinned revision into the scratch `weights/`, `verify_snapshot` PASS (8 files), no further download in the log, `validate_inputs` → `accepted` (3 images, 3 captions, 9 pairs, one recorded duplicate-caption rejection), one `score` call over the 3×3 grid (3.21 s, float32) → ITM diagonal 0.998 / 0.634 / 0.278 with off-diagonal ≤ 0.001 and cosine diagonal 0.495 / 0.422 / 0.441 (identical to the smoke run), `evaluation_report` `sample-sanity` with `recall_at_1` = 1.0 in both directions for both scores (chance 0.333), scene digests `f217010b…` / `3069e785…` / `7aa6fe00…`, 5 outputs written (JSON ×3, CSV, contact-sheet PNG) | 92.9 s | PASS — pre-flight only; not promotion evidence |
-
-### Manual clean-runtime evidence
-
-| Date (UTC) | Commit / notebook blob | Executor | Path exercised | Wall | Outcome |
-|---|---|---|---|---|---|
-| 2026-09-14 | 2ccdea7 / 90b0268a87f0 | Kaggle CPU (kurtvalcorza/dimer-nb2-blip-itm v1) | Default sample path | 265.2 s | **PASSED** — 8/8 ok code cells executed cleanly, 18 files, 896 MB staged |
+| 2026-09-19 | `1f24a1d` / `6f1e02a3` | Kaggle Tesla T4 (`kurtvalcorza/dimer-nb2-blip-itm` v2; image `torch 2.10.0+cu128` / `transformers 5.0.0` before the pinned install, `torch 2.14.0+cu130` / `transformers 4.57.6` after, Python 3.12.13, `cuda:0`) | Default sample path, `Run all` from a fresh interpreter with an empty Hugging Face cache and no repository checkout (blob SHA-1 verified against GitHub before execution) | 596.5 s | **PASSED** — 11/11 code cells ok (1 restart after install cell); 691 files, 1063 MB staged from the Hub into a clean cache; comparison {i2t_recall_at_1: {chance: 0.003, neighbour: 0.008, frozen: 0.742, adapted: 0.79}, i2t_recall_at_5: {chance: 0.013, neighbour: 0.026, frozen: 0.905, adapted: 0.939}, i2t_recall_at_10: {chance: 0.025, neighbour: 0.043, frozen: 0.944, adapted: 0.962}, t2i_recall_at_1: {chance: 0.003, neighbour: 0.008, frozen: 0.652, adapted: 0.672}, t2i_recall_at_5: {chance: 0.013, neighbour: 0.017, frozen: 0.863, adapted: 0.877}, t2i_recall_at_10: {chance: 0.026, neighbour: 0.031, frozen: 0.918, adapted: 0.918}, rsum: {chance: 0.082, neighbour: 0.132, frozen: 5.024, adapted: 5.157}, itm: {itm_i2t_recall_at_1: {frozen: 0.803, adapted: 0.841}, itm_t2i_recall_at_1: {frozen: 0.708, adapted: 0.701}, itm_pair_accuracy: {frozen: 0.683, adapted: 0.683}}, median_rank: {frozen: [1, 1], adapted: [1, 1]}, delta_vs_frozen: {i2t_recall_at_1: 0.049, i2t_recall_at_5: 0.033, i2t_recall_at_10: 0.018, t2i_recall_at_1: 0.02, t2i_recall_at_5: 0.014, t2i_recall_at_10: 0.001, rsum: 0.134, itm_i2t_recall_at_1: 0.038, itm_t2i_recall_at_1: -0.008, itm_pair_accuracy: 0}, by_category: {no-text: {n: 160, frozen: [0.812, 0.775], adapted: [0.812, 0.786]}, text: {n: 231, frozen: [0.732, 0.628], adapted: [0.801, 0.643]}}}; reload parity {identical_scores: 64, of: 64}; run summary and executed notebook archived under `.agent/backups/kaggle-e2e-2026-09-19/out/dimer-nb2-blip-itm/v2/evidence/` in the workspace |
+| 2026-09-19 | generated at `e38e7a8` / blob `567665a3046a` | Local Windows-venv harness (`run_nb_local.py`: nbclient, fresh `python3` kernel, `CUDA_VISIBLE_DEVICES=-1`, `HF_HUB_OFFLINE=1`, `DIMER_NOTEBOOK_CI_PREINSTALLED=1`), Python 3.12.10, torch 2.14.0+cu130, transformers 4.57.6, snapshot, annotation cache and the 672 photographs pre-staged | Default sample path, all 11 code cells: pinned install skipped (pre-installed), `stage_missing_files` reported nothing to fetch, `verify_snapshot` PASS (8 files), annotations read from the pre-staged cache and 672 photographs re-hashed, split 208 / 40 / 391 by image (gallery 1,737 captions), the 3×3 grid scored (recall@1 1.0 both ways), baselines rsum 0.082 / 0.132, frozen gallery rsum 5.024 in 236.4 s (i2t R@1 0.742, t2i 0.652, ITM-reranked i2t 0.803, pair accuracy 0.683; `text` 0.732 / 0.628, `no-text` 0.812 / 0.775), four epochs 561.1 s over 888 pairs (validation rsum 5.816 → 5.855 → 5.886 → 5.861 → 5.861, epoch 2 kept), adapted gallery rsum 5.162 (i2t R@1 0.791, t2i 0.673, ITM-reranked i2t 0.844 / t2i 0.703, pair accuracy 0.688; `text` 0.797 / 0.644, `no-text` 0.812 / 0.789), grid unchanged after adaptation, adapter 77,202,384 B / 58 tensors, reload parity 64/64, 6 outputs written; the committed blob differs from the executed one in markdown prose only (CPU figures filled in after this run) | 1512.3 s | PASS — pre-flight only; not promotion evidence |
 
 ## Current status
 
-No clean-runtime execution in a **supported** runtime (Colab or Kaggle) has been recorded yet; clean execution evidence is now recorded below. What exists: static validation (`tools/validate_release_assets.py`), the generator parity
-checks (`--check` OK), the offline unit suite, and one **local fresh-kernel execution** of the generated
-notebook (table above) that exercised the standalone carrier, the real `hf_hub_download` staging path
-into an empty `weights/` directory, verification, scoring, the evaluation report and every export —
-which is necessary but not promotion evidence because the workstation is not a supported runtime. The
-registry status remains **Candidate** until a reviewer confirms a recorded supported-runtime run against
-the notebook blob under review and an integrator promotes it. Facts a reviewer should weigh: the CUDA
-path has not been executed; the executed weight file is a pickle (`pytorch_model.bin`, digest-checked before
-`torch.load(weights_only=True)`) while the DIMER-hosted blob is the upstream `tf_model.h5`, which this
-repository never loads and whose equivalence to the pickle it has not verified; the tutorial grid is three
-flat cartoons and three authored captions, so a perfect recall@1 on nine pairs is plumbing evidence only, and
-the fruit scene's own caption scored just 0.278 — an uncalibrated score that no fixed threshold would treat
-consistently; blank and noise images still receive rankings; and every pair costs two forward passes
-(~0.35 s on the reference CPU), so a 16×16 grid is 256 pairs and scales as images × captions, not
-linearly.
+**Release-grade.** The `E2E` notebook blob `6f1e02a3` (committed at `1f24a1d`) executed top-to-bottom in a clean Kaggle Tesla T4 runtime on 2026-09-19 (11/11 ok (1 restart after install cell), 596.5 s, 691 files, 1063 MB fetched from the Hub and digest-verified inside the notebook) with no repository checkout — the REL1/REL10 supported-runtime evidence this file gates on. The local pre-flight rows above are what preceded it and remain history. Any later change to the carried modules or to the notebook produces a new blob, and the registry returns to **Candidate** until a clean run of that blob is recorded here.
+
+Facts a reviewer should still weigh: the frozen model is already a competent retriever on VizWiz photographs — at the ceiling of a 70-photograph gallery (rsum 5.72 of 6), which is why the test gallery is 391 photographs — so the adaptation gain is a few recall points carried by the image → text direction (rsum 5.024 → 5.157 on the T4 run, i2t R@1 0.742 → 0.790, on the `text` photographs 0.732 → 0.801) while the ITM pair accuracy does not move (0.683); the T4 run reproduced the CPU pre-flight within 0.005 rsum (same seed; the hard-negative sampling is seeded too); the 40-photograph validation split saturates and selects the epoch weakly; four text-encoder blocks at 5e-5 for six epochs gained no more than the default in the build record; and the drawn grid re-scored after adaptation is one 3×3 grid of evidence about behaviour outside the corpus, not a measurement.
