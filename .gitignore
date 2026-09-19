@@ -16,3 +16,6 @@ weights/**/*.pth
 weights/**/*.onnx
 weights/**/.cache/
 weights/**/*.h5
+
+# VizWiz-Captions annotations and photographs are fetched at run time and digest-verified; never committed
+weights/vizwiz-captions/

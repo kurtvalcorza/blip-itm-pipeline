@@ -1,6 +1,6 @@
 # BLIP ITM-base COCO image-text matching pipeline
 
-DIMER inference wrapper for **BLIP fine-tuned for image-text retrieval on COCO** (`Salesforce/blip-itm-base-coco`), Salesforce's ~224M-parameter vision-language model (ViT-B/16 image encoder at 384×384, a BERT-style text encoder and an image-grounded text encoder) that scores how well a caption matches an image two ways — the ITC cosine similarity of the projected embeddings and the ITM head's match probability over the fused pair — pinned to an immutable Hugging Face revision and loaded only from a digest-verified local snapshot. The pipeline accepts a grid of 1–16 images and 1–16 captions, scores every pair, ranks the captions per image and ships `recall_at_1` for callers who know the correspondence; it attaches no calibration and never abstains.
+DIMER inference and fine-tuning wrapper for **BLIP fine-tuned for image-text retrieval on COCO** (`Salesforce/blip-itm-base-coco`), Salesforce's 224M-parameter vision-language model (ViT-B/16 image encoder at 384×384, a BERT-style text encoder and an image-grounded text encoder) that scores how well a caption matches an image two ways — the ITC cosine similarity of the projected embeddings and the ITM head's match probability over the fused pair — pinned to an immutable Hugging Face revision and loaded only from a digest-verified local snapshot. The pipeline accepts a grid of 1–16 images and 1–16 captions, scores every pair, ranks the captions per image and ships `recall_at_1` for callers who know the correspondence; it attaches no calibration and never abstains. It also carries a bounded adaptation contract: `adapt` fine-tunes the text encoder's last blocks, the ITC projections and the ITM head with BLIP's contrastive + matching objectives on a validated `{id, image, captions}` dataset, `evaluate` scores retrieval over a held-out gallery (recall@1/5/10 both ways, median rank, rsum, ITM re-ranking, ITM pair accuracy) beside two non-neural baselines, and `save_artifact` / `from_artifact` export and reload the trained tensors as a safetensors adapter bound to the pinned base.
 
 **Weight format.** Upstream hosts no SafeTensors at the pinned revision. This package executes the digest-pinned `pytorch_model.bin` (a pickle, deserialised with `weights_only=True` only after its SHA-256 matched the manifest); the `tf_model.h5` upstream also hosts is the DIMER upload artifact (DIMER does not accept `.bin`) and is never loaded here. Both digests are recorded in `docs/WEIGHTS.md` and `MODEL_CARD.md`.
 
@@ -10,7 +10,7 @@ DIMER inference wrapper for **BLIP fine-tuned for image-text retrieval on COCO**
 - Revision: `bed8ad38cb2d04a5a4bdf2d071b3c3c0a4aa724c`
 - Upstream weight license: BSD-3-Clause
 - Upstream task: image-text matching / retrieval (COCO)
-- Repository adaptation: **none**; inference only
+- Repository adaptation: bounded supervised fine-tuning of the text encoder's last *k* blocks, `vision_proj`, `text_proj` and `itm_head` (`adapt`; the vision encoder and the text embeddings stay frozen); the tutorial's default corpus is VizWiz-Captions (`mm-eval/VizWiz-Captions` @ `c4a6d897836e7885d0095134f92d392e4e770539`, CC BY 4.0), read column-only plus two row groups of photographs with per-file digests at run time
 
 ## Quick start
 
@@ -27,9 +27,20 @@ print(result["cosine"])                          # ITC cosine similarity
 print(result["rankings"][0][0])                  # best caption for the first image by ITM probability
 
 print(recall_at_1(result["itm_probability"], [0, 1]))   # if you know which caption belongs to which image
+
+# Adaptation: records are {id, image, captions}; every image stays in one split
+from blip_itm_pipeline import fetch_sample_dataset, chance_baseline
+
+splits = fetch_sample_dataset()                          # pinned VizWiz-Captions sample: 208 / 40 train / val, 391-photograph test gallery
+print(chance_baseline(splits["test"])["rsum"])
+print(pipe.evaluate(splits["test"], rerank_top_k=5)["rsum"])   # frozen model over the gallery
+pipe.adapt(splits["train"], splits["validation"], epochs=4, lr=2e-5)   # last 2 text blocks + projections + ITM head
+print(pipe.evaluate(splits["test"], rerank_top_k=5)["rsum"])   # adapted model, same gallery
+pipe.save_artifact("outputs/adapter")                    # adapter.safetensors + manifest.json
+again = BlipItmPipeline.from_artifact("outputs/adapter")
 ```
 
-Install into a Python 3.12 environment that already holds the pinned dependencies with `pip install -e . --no-deps`; run `pytest -q -o addopts= tests` for the offline test suite (no weights needed). On a fresh clone the manifest is committed but the weights are not: `BlipItmPipeline.from_pretrained(allow_download=True)` fetches exactly the missing manifest-listed files at the pinned revision, then verifies them.
+Install into a Python 3.12 environment that already holds the pinned dependencies with `pip install -e . --no-deps`; run `pytest -q -o addopts= tests` for the offline test suite (40 tests, no weights needed; `tests/test_model_backed.py` adds 6 model-backed tests, one on CUDA, when the snapshot is staged). On a fresh clone the manifest is committed but the weights are not: `BlipItmPipeline.from_pretrained(allow_download=True)` fetches exactly the missing manifest-listed files at the pinned revision, then verifies them.
 
 ## Weights layout
 
@@ -53,7 +64,7 @@ weights/blip-itm-base-coco/
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/blip-itm-pipeline/blob/main/tutorials/blip_itm_colab.ipynb)
 
-`tutorials/blip_itm_colab.ipynb` is declared `TASK-INFERENCE` / `GUIDED` under DIMER Notebook Specification 2.0 and is **standalone** (§4): generated by `tools/build_notebook.py`, it carries the pipeline module, model identity, manifest digests and runtime pins, so the exported notebook runs without this repository (parity enforced by `tests/test_notebook_parity.py`). Its default `Run all` path draws three cartoon scenes in code with three authored captions (no download; the diagonal is the known correspondence), surfaces the ceilings, resolves the pinned model through the carried staging and verification path, validates the request through `validate_inputs` into an input manifest, scores the 3×3 grid through `BlipItmPipeline.score`, writes an `evaluation_report` whose recall@1 entries in both directions are sanity evidence only (`sample-sanity` against the drawn correspondence, `not-measurable` without; no COCO retrieval benchmark), and exports JSON, a pair-scores CSV and a contact-sheet PNG. BYOD (your own images and captions) is optional and gated off by default. See `tutorials/README.md` for the registry and `docs/release-verification.md` for the release gate.
+`tutorials/blip_itm_colab.ipynb` is declared `E2E` / `GUIDED` under DIMER Notebook Specification 2.0 and is **standalone** (§4): generated by `tools/build_notebook.py`, it carries the three pipeline modules (`pipeline.py`, `metrics.py`, `samples.py`), model identity, manifest digests and runtime pins, so the exported notebook runs without this repository (parity enforced by `tests/test_notebook_parity.py`). Its default `Run all` path resolves the pinned model through the carried staging and verification path (the 895 MB pickle re-hashed before `torch` is imported), reads the text columns of one pinned VizWiz-Captions shard column-only and the 672 photographs of its first two row groups in two digest-checked range reads, validates and splits them by image (208 / 40 / 70 from row group 0, row group 1's 321 photographs joining a 391-photograph / 1,737-caption test gallery), scores the drawn 3×3 grid through `validate_inputs` and `score`, measures the frozen model's retrieval over the gallery beside the chance and colour-keyword baselines (recall@1/5/10 both ways, median rank, rsum, ITM top-5 re-ranking, ITM pair accuracy, per `text` / `no-text` category), fine-tunes the text encoder's last two blocks, the ITC projections and the ITM head for four epochs with BLIP's contrastive + matching losses and validation-rsum epoch selection, scores the gallery again, re-scores the grid, and exports a safetensors adapter that it reloads with verified parity — one seeded split of one corpus, no benchmark claim. BYOD (one zip of images plus `records.jsonl`) is optional and gated off by default. See `tutorials/README.md` for the registry and `docs/release-verification.md` for the release gate.
 
 ## Release status
 
