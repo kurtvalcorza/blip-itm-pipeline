@@ -419,7 +419,7 @@ def validate_weight_facts(root: Path = ROOT) -> None:
 def validate_release_status() -> None:
     """STATUS.md and README.md describe the primary release status; each tutorial registry row carries its own status."""
     status = _read(ROOT / "STATUS.md")
-    match = re.search(r"Current status: \\*\\*(Candidate|Release-grade)\\b", status)
+    match = re.search(r"Current status: \*\*(Candidate|Release-grade)\b", status)
     _check(match is not None, "STATUS.md must declare 'Current status: **Candidate**' or '**Release-grade**'")
     token = match.group(1)
     readme = _read(ROOT / "README.md")
@@ -428,7 +428,7 @@ def validate_release_status() -> None:
     _check(section.lstrip().startswith(f"**{token}**"), f"README.md release status must open with **{token}**")
     registry = _read(ROOT / "tutorials" / "README.md").replace("**", "")
     rows = {
-        name: next((line for line in registry.splitlines() if line.startswith(f"| \`{name}\`")), None)
+        name: next((line for line in registry.splitlines() if line.startswith(f"| `{name}`")), None)
         for name in (NOTEBOOK_NAME, WORKSHOP_NOTEBOOK_NAME)
     }
     primary = rows[NOTEBOOK_NAME]
@@ -683,12 +683,12 @@ def validate_notebooks() -> None:
     _validate_parity(path, notebook, code_cells, build)
     _validate_notebook_content(path, code_cells, markdown, embedded)
     registry = _read(tutorials / "README.md")
-    _check(f"\`{path.name}\`" in registry, f"{path.name} missing from tutorials/README.md")
+    _check(f"`{path.name}`" in registry, f"{path.name} missing from tutorials/README.md")
     _check(
-        f"\`{WORKSHOP_NOTEBOOK_NAME}\`" in registry,
+        f"`{WORKSHOP_NOTEBOOK_NAME}`" in registry,
         f"{WORKSHOP_NOTEBOOK_NAME} missing from tutorials/README.md",
     )
-    _check(f"\`{EXPECTED_PROFILE}\`" in registry, f"tutorials/README.md must record \`{EXPECTED_PROFILE}\`")
+    _check(f"`{EXPECTED_PROFILE}`" in registry, f"tutorials/README.md must record `{EXPECTED_PROFILE}`")
     _check(
         f"DIMER Notebook Specification {NOTEBOOK_SPEC}" in registry,
         "tutorials/README.md must name the primary notebook spec version",
