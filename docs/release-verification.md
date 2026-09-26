@@ -173,3 +173,16 @@ Lightweight tests execute the actual loader, evaluator, reranker, index verifier
 Pending: fresh STANDARD and FULL T4 runs with exact commit/blob, complete saved outputs, versions, restart count and wall/VRAM; valid STANDARD BYOD and FULL split BYOD through real models and adapter/index exports; invalid-caption/duplicate-image runs rejected before optional model loading. Preserve each `outputs/byod/run-*` result independently. These are open hosted/REL12 evidence gates, not presumed complete from local tests.
 
 Local remediation checks:17 focused tests passed, including STANDARD/FULL orchestration, adapter-loss rejection and deterministic cross-image batch completion for small FULL datasets. BLIP combined suite28 passed (17 focused+6 workshop+5 primary parity). Safetensors IO and model weights are doubled in focused tests; no real model execution is claimed.
+
+
+### Maintainer-supplied successful Colab run — 2026-09-26
+
+The maintainer supplied the [executed notebook](execution-evidence/2026-09-26/DIMER_MultiModel_Vision_Language_Retrieval_Workshop.ipynb) and authorized merging PR #7 (merge commit `380be23`). The file is archived byte-for-byte, SHA-256 `b76acfad5db8d02119b412160164e61bdbb0722c6d09fb053f3039cd0dfccd42`. All 33 code cells have execution counts, 59 saved outputs and zero saved errors. Code-cell sources match commit `89eea028600220148b437417fb05b98606682807`, tutorial blob `3cdeee63722219eb9a06da8e81cf2985acb03850`, apart from Colab-inserted `# @title` lines. One code cell differs from the committed blob only by trailing whitespace that Colab strips. Later commits on `main` that touch the notebook (`f474a75` (AI Use Disclosure)) change only markdown cells; its code cells are identical to the executed revision. This evidence commit does not change tutorial code.
+
+Scope: STANDARD tier: pinned VizWiz-derived parquet shard, test gallery of 391 images and 1,737 captions; SigLIP v1, SigLIP 2 and BLIP ITC embeddings with BLIP ITM reranking of the top 5. FULL adaptation and BYOD were not exercised. The same executed notebook (blob `3cdeee63`) also covers `siglip2-vision-language-pipeline` PR #13.
+
+Saved runtime: Python 3.13.15, torch 2.14.0+cu130, Transformers 4.57.6, pyarrow 25.0.1, CUDA Tesla T4. Execution reaches the final completion summary. The separate exported files were not supplied, so their bytes/digests were not independently inspected. Saved counts run sequentially from 1 to 33; runtime freshness and absence of manual restarts/reruns are not independently established by the artifact.
+
+Results (sample-sanity measures on the built-in data, not general model rankings): Test recall@1 image→text / text→image: SigLIP 2 0.790 / 0.721, SigLIP v1 0.783 / 0.716, BLIP ITC 0.742 / 0.652; BLIP ITM reranking of the top 5 raises these to 0.839 / 0.731 (SigLIP 2 candidates), 0.834 / 0.734 (SigLIP v1) and 0.803 / 0.708 (BLIP ITC).
+
+Status remains **Candidate**. Merge approval and this successful default-path run do not close the optional-path (FULL/BYOD) or REL12 qualification gates, and `metadata.dimer.clean_runtime_evidence` in the notebook stays `pending` as authored (editing it would change the verified blob).
