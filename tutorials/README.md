@@ -43,3 +43,14 @@ The previous notebook (`TASK-INFERENCE`) scored a drawn 3×3 grid and reported `
 ## AI Assistance Disclosure
 
 This repository’s code and accompanying documentation were developed with generative AI assistance for code development and technical writing under maintainer direction. The maintainer remains responsible for reviewing the implementation, validating results, and making release decisions. AI assistance does not constitute independent verification, provider endorsement, or release approval.
+
+
+## Shared Vision-Language Retrieval learning unit — 2026-09-26
+
+`DIMER_MultiModel_Vision_Language_Retrieval_Workshop.ipynb` is one learning unit with BLIP ITM and SigLIP2 repository entry points. Both carry identical executable cells. It remains **Candidate**; earlier primary notebook evidence does not qualify this supplemental three-model comparison.
+
+The optional BYOD ZIP now runs actual SigLIP2, SigLIP v1 and BLIP ITC retrieval, BLIP ITM reranking, digest-verified embedding index export/reload and JSON/CSV results in an isolated run directory. STANDARD needs at least two evaluation images. FULL requires explicit train/validation/test roles with at least two images each; it adapts only on train, selects with validation, freezes before test and compares live adapted validation embeddings to a fresh adapter reload. Limits:128 images total,1–5 distinct string captions/image,256 characters/caption,16–4096px sides and100 million decoded pixels. Every image must be declared; duplicate decoded pixels are rejected within/across roles. ZIP extraction is nondestructive and rejects traversal, symlinks and duplicate members.
+
+Runtime bootstrap retains an already imported NumPy2.x version and falls back to2.1.3, reflecting observed Colab2.1.3 preloads; other model/runtime pins are unchanged. Any incompatible preloaded packages still request a recorded session restart. This policy is tested locally, not a new uninterrupted hosted-run claim. ITM probabilities require exact cardinality and finite0–1 range; index reload checks digests and complete rankings in both directions.
+
+The optional activity compares candidate-oracle recall at K5 versus10 on saved validation scores only. It does not require model reloads or overwrite canonical settings. Infrastructure cells are collapsed.
