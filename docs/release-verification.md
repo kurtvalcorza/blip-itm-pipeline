@@ -186,3 +186,12 @@ Saved runtime: Python 3.13.15, torch 2.14.0+cu130, Transformers 4.57.6, pyarrow 
 Results (sample-sanity measures on the built-in data, not general model rankings): Test recall@1 image→text / text→image: SigLIP 2 0.790 / 0.721, SigLIP v1 0.783 / 0.716, BLIP ITC 0.742 / 0.652; BLIP ITM reranking of the top 5 raises these to 0.839 / 0.731 (SigLIP 2 candidates), 0.834 / 0.734 (SigLIP v1) and 0.803 / 0.708 (BLIP ITC).
 
 Status remains **Candidate**. Merge approval and this successful default-path run do not close the optional-path (FULL/BYOD) or REL12 qualification gates, and `metadata.dimer.clean_runtime_evidence` in the notebook stays `pending` as authored (editing it would change the verified blob).
+
+## Notebook review fixes, revision 0.2.0-candidate — 2026-10-02
+
+Applies only to `DIMER_MultiModel_Vision_Language_Retrieval_Workshop.ipynb`. A Notebook Review Framework v1 review of `a25fdf6` (`docs/reviews/2026-10-02-notebook-review/`) found 3 Major and 9 Minor issues; all 12 are fixed in this revision by anchor-asserting edits to the notebook (there is no in-repo generator), recorded in `metadata.dimer.review_revisions`. Cell ids and order are unchanged.
+
+- **Reading the 2026-09-26 result above.** Its text→image comparison is not like-for-like: the coarse values (0.721 / 0.716 / 0.652) are over all 1,737 captions, the reranked values (0.731 / 0.734 / 0.708) over the 391 first captions. The image→text comparison uses the same 391 queries on both sides. Revision 0.2.0 reports coarse Recall@1 on exactly the reranked queries (`coarse_i2t_r1`, `coarse_t2i_r1_canonical`) and the deltas.
+- Other changes: category diagnostics add full-gallery columns; the BYOD branch displays its retrieval and reranking tables and names the failing `records.jsonl` line/id/field; caption perturbation (validation only) is implemented; the report bundle holds only files written since the current Run all started; licence and pretraining-overlap statements, sample answers, glossary entries and a results summary are added.
+- Verification so far: CPU-only unit tests that execute the notebook's own cells with NumPy data and stand-in models (`tests/test_bvr_review_fixes.py`, 21 tests, all failing on `a25fdf6`). This is **not** clean-runtime evidence. The 2026-09-26 run covers the previous code cells only.
+- Required before release: a fresh Colab T4 `STANDARD` Run all of this revision; a `FULL` Run all (adaptation, fresh reload, adapted reranking); BYOD with a valid archive and one rejected archive (REL12). Status remains **Candidate**.

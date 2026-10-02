@@ -47,7 +47,7 @@ This repository’s code and accompanying documentation were developed with gene
 
 ## Shared Vision-Language Retrieval learning unit — 2026-09-26
 
-`DIMER_MultiModel_Vision_Language_Retrieval_Workshop.ipynb` is one learning unit with BLIP ITM and SigLIP2 repository entry points. Both carry identical executable cells. It remains **Candidate**; earlier primary notebook evidence does not qualify this supplemental three-model comparison.
+`DIMER_MultiModel_Vision_Language_Retrieval_Workshop.ipynb` is one learning unit with BLIP ITM and SigLIP2 repository entry points. Both carried identical executable cells up to revision 0.1.0-candidate; revision 0.2.0-candidate (2026-10-02 review fixes, BVR-M1..m9) is applied here first, and the SigLIP2 copy differs until it receives the same changes. It remains **Candidate**; earlier primary notebook evidence does not qualify this supplemental three-model comparison.
 
 The optional BYOD ZIP now runs actual SigLIP2, SigLIP v1 and BLIP ITC retrieval, BLIP ITM reranking, digest-verified embedding index export/reload and JSON/CSV results in an isolated run directory. STANDARD needs at least two evaluation images. FULL requires explicit train/validation/test roles with at least two images each; it adapts only on train, selects with validation, freezes before test and compares live adapted validation embeddings to a fresh adapter reload. Limits:128 images total,1–5 distinct string captions/image,256 characters/caption,16–4096px sides and100 million decoded pixels. Every image must be declared; duplicate decoded pixels are rejected within/across roles. ZIP extraction is nondestructive and rejects traversal, symlinks and duplicate members.
 
