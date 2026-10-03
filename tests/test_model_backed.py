@@ -64,8 +64,9 @@ def _grid(pipe, records):
     return pipe.score(images, [r["captions"][0] for r in records])["cosine"].round(4).tolist()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def pipe():
+    # A fresh base per test: adapt() refuses an already-adapted pipeline (review ITM-M3).
     return BlipItmPipeline.from_pretrained(device="cpu")
 
 
