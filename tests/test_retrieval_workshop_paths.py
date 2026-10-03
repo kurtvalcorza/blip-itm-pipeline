@@ -1,54 +1,21 @@
-import ast
-import gc
-import hashlib
 import io
 import json
-import platform
 import types
 import zipfile
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import pytest
 from PIL import Image
 
-NOTEBOOK = (
-    Path(__file__).resolve().parents[1]
-    / "tutorials/DIMER_MultiModel_Vision_Language_Retrieval_Workshop.ipynb"
-)
-CELLS = json.loads(NOTEBOOK.read_text(encoding="utf8"))["cells"]
+from retrieval_workshop_support import NB, load_stages
+
+CELLS = NB["cells"]
 
 
 def helpers(tmp_path):
-    ns = {
-        "np": np,
-        "pd": pd,
-        "Path": Path,
-        "Image": Image,
-        "json": json,
-        "hashlib": hashlib,
-        "gc": gc,
-        "platform": platform,
-        "RECALL_KS": (1, 5, 10),
-        "WORK_ROOT": tmp_path / "work",
-        "OUTPUT_ROOT": tmp_path / "out",
-        "WORKSHOP_TIER": "STANDARD",
-        "USE_BYOD": False,
-        "RERANK_TOP_K": 5,
-        "DEVICE": "cpu",
-    }
-    ns["OUTPUT_ROOT"].mkdir(exist_ok=True)
-    ns["sha256_file"] = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
-    for i in [6, 14, 25, 27, 55]:
-        module = ast.parse("".join(CELLS[i]["source"]))
-        module.body = [n for n in module.body if isinstance(n, ast.FunctionDef)]
-        exec(compile(module, "helper", "exec"), ns)
-    from packaging.version import Version
-
-    ns["Version"] = Version
-    exec("".join(CELLS[59]["source"]), ns)
-    return ns
+    """Globals of a fresh copy of the carried stage file (tools/retrieval_workshop.py)."""
+    return load_stages(tmp_path)
 
 
 def archive(tmp_path, change=None, full=False):
@@ -103,12 +70,12 @@ def test_valid_gallery_and_full_split(tmp_path):
     assert set(ns["load_byod"](archive(tmp_path, full=True))) == {"train", "validation", "test"}
 
 
-def test_numpy_policy(tmp_path):
-    ns = helpers(tmp_path)
-    assert ns["compatible_numpy_pin"]("2.1.3") == "numpy==2.1.3"
-    assert ns["compatible_numpy_pin"]("2.3.0") == "numpy==2.3.0"
-    assert ns["compatible_numpy_pin"](None) == "numpy==2.1.3"
-    assert ns["stale_runtime_versions"]({"torch": "2.14.0+cu130"}, ["torch==2.14.0"]) == []
+def test_numpy_pin_moved_into_the_lock():
+    """The former kernel NumPy policy is gone: the isolated environment installs the fallback pin."""
+    from retrieval_workshop_support import LOCK_FILE, src
+
+    assert "numpy==2.1.3 \\" in LOCK_FILE.read_text(encoding="utf-8")
+    assert "compatible_numpy_pin" not in src("80193aa0") and "stale_runtime_versions" not in src("80193aa0")
 
 
 @pytest.mark.parametrize("values", [[], [float("nan")] * 4, [1.1] * 4])

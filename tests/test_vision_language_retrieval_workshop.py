@@ -33,8 +33,16 @@ def constants_from_source(source: str) -> dict:
     return out
 
 
+def carried_stage_source() -> str:
+    """The stage file the notebook's carrier cell writes (model and corpus pins live there since 0.3.0)."""
+    for node in ast.parse("".join(next(c for c in load()["cells"] if c.get("id") == "uvcarrier")["source"])).body:
+        if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", None) == "CARRIED_FILES":
+            return ast.literal_eval(node.value)["retrieval_workshop.py"]
+    raise AssertionError("carrier cell missing")
+
+
 def notebook_constants() -> dict:
-    out = {}
+    out = constants_from_source(carried_stage_source())
     for cell in code_cells():
         out.update(constants_from_source(cell))
     return out
