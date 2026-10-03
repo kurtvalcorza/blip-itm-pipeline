@@ -688,6 +688,14 @@ class BlipItmPipeline:
             raise ValueError("lr must be in (0, 1e-3]")
         if isinstance(batch_size, bool) or not isinstance(batch_size, int) or not 2 <= batch_size <= 64:
             raise ValueError("batch_size must be an int in 2..64")
+        if self.adapter is not None:
+            # adapt() trains from the weights in memory and records epoch 0 as the frozen model; on an adapted
+            # (or artifact-loaded) pipeline that would stack a second adaptation under a "frozen model" label
+            # and export a manifest that misdescribes its tensors (review ITM-M3).
+            raise ValueError(
+                "this pipeline is already adapted; adapt() starts from the pretrained base, so build a fresh "
+                "pipeline with from_pretrained() first"
+            )
         names = self._trainable_names(trainable_text_layers)
         train_checked = validate_dataset(train)["records"]
         val_checked = (

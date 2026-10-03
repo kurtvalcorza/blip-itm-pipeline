@@ -1,0 +1,79 @@
+[colab] Parsing notebook '/home/kurt/colab-runs/blip-itm-pipeline-63a18e0-34d898/blip_itm_colab_63a18e0_colab-cli-t4.ipynb'...
+[colab] Executing cell 1/13 - Infrastructure: install the locked runtime into an isolated environment...
+{'isolated_environment': '/content/dimer_isolated_env', 'isolated_python': '3.12.12', 'kernel_python': '3.13.15', 'locked_packages': 48, 'setup_seconds': 57}
+[colab] Executing cell 2/13 - Route the remaining cells to the isolated environment...
+Every later code cell now runs in /content/dimer_isolated_env/bin/python (pid 1180).
+[colab] Executing cell 3/13 - blip_itm-07...
+{'notebook_source': {'repository': 'blip-itm-pipeline', 'repository_revision': '59a251121e9e58c06aea34160dd1f746a9f117d9', 'embedded_module': 'src/blip_itm_pipeline/pipeline.py', 'embedded_modules': ['src/blip_itm_pipeline/metrics.py', 'src/blip_itm_pipeline/pipeline.py', 'src/blip_itm_pipeline/samples.py'], 'module_sha256': 'feb3c99226bc4d037b4aaf08c56a14c2415bbf2b35a95c2963c24319af612d36', 'generator': 'build_notebook.py/2.1', 'notebook_spec': '2.2'}, 'python': '3.12.12', 'torch': '2.14.0+cu130', 'transformers': '4.57.6', 'cuda': True}
+[colab] Executing cell 4/13 - blip_itm-09...
+[colab] Executing cell 5/13 - blip_itm-11...
+[colab] Executing cell 6/13 - blip_itm-13...
+[colab] Executing cell 7/13 - blip_itm-15...
+{'model_id': 'Salesforce/blip-itm-base-coco', 'revision': 'bed8ad38cb2d04a5a4bdf2d071b3c3c0a4aa724c', 'license': 'bsd-3-clause', 'files': 8, 'total_bytes': 896093679}
+{'weights_dir': '/content/weights/blip-itm-base-coco', 'fetched': ['README.md', 'config.json', 'preprocessor_config.json', 'pytorch_model.bin', 'special_tokens_map.json', 'tokenizer.json', 'tokenizer_config.json', 'vocab.txt']}
+{'verified_files': 8, 'revision': 'bed8ad38cb2d04a5a4bdf2d071b3c3c0a4aa724c'}
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+{'device': 'cuda:0', 'source': 'local-snapshot'}
+[colab] Executing cell 8/13 - blip_itm-17...
+{'data_source': 'VizWiz-Captions VizWiz-Captions v1 (2020) as re-converted on the Hugging Face Hub, dataset revision c4a6d897 (CC BY 4.0 (Gurari et al. 2020; vizwiz.org/tasks-and-datasets/image-captioning))', 'raw_rows': {'annotations': 1550, 'photographs': 672, 'row_groups': [0, 1]}, 'splits': {'train': 208, 'validation': 40, 'test': 391}, 'gallery_captions': 1737, 'text_sha256': '9799ebb13cf6a7e7...', 'pinned_photographs': 672}
+{'train': {'n': 208, 'unique_images': 208, 'categories': {'text': 110, 'no-text': 98}, 'captions_per_image': {'min': 1, 'max': 5}, 'caption_words': {'min': 7, 'max': 40}, 'digest': '572c71c1d17977f7...'}}
+{'validation': {'n': 40, 'unique_images': 40, 'categories': {'no-text': 15, 'text': 25}, 'captions_per_image': {'min': 1, 'max': 5}, 'caption_words': {'min': 8, 'max': 42}, 'digest': 'f00752da09b6fb96...'}}
+{'test': {'n': 391, 'unique_images': 391, 'categories': {'no-text': 160, 'text': 231}, 'captions_per_image': {'min': 1, 'max': 5}, 'caption_words': {'min': 7, 'max': 41}, 'digest': 'e7c4201efbfc5c23...'}}
+{'example': {'id': 'train-0000', 'image': '29705.jpg', 'size': [968, 1296], 'category': 'text', 'query': 'An open book with words about math problems I think.', 'captions': 5}}
+{'probe': 'duplicate id', 'rejected': "duplicate id 'same'"}
+{'probe': 'missing image file', 'rejected': 'records[0]: image file not found: work/does-not-exist.jpg'}
+{'probe': 'duplicated caption', 'rejected': 'records[0]: reference captions must be distinct'}
+{'probe': 'too small', 'rejected': '3 records; 8..5000 are required'}
+[colab] Executing cell 9/13 - blip_itm-19...
+{'MIN_IMAGE_SIDE': 16, 'MAX_IMAGE_SIDE': 4096, 'IMAGE_SIZE': 384, 'MAX_IMAGES': 16, 'MAX_TEXTS': 16, 'MAX_TEXT_CHARS': 256, 'MIN_RECORDS': 8, 'MAX_RECORDS': 5000, 'MIN_CAPTIONS': 1, 'MAX_CAPTION_CHARS': 256}
+{'scenes': ['synthetic_house_640x480.png', 'synthetic_beach_640x480.png', 'synthetic_fruit_480x480.png'], 'rgb_sha256': {'synthetic_house_640x480.png': 'f217010b24892234...', 'synthetic_beach_640x480.png': '3069e7856849a0d1...', 'synthetic_fruit_480x480.png': '7aa6fe00162db41e...'}, 'manifest_verdict': 'accepted', 'findings': 1}
+{'seconds': 1.6, 'pairs': 9}
+itm_probability [image][text]:
+[[0.998 0.    0.   ]
+ [0.001 0.634 0.001]
+ [0.    0.    0.278]]
+cosine [image][text]:
+[[0.495 0.199 0.292]
+ [0.289 0.422 0.251]
+ [0.23  0.215 0.441]]
+{'checks': {'grid_shape': True, 'probabilities_in_range': True, 'cosines_finite': True, 'one_ranking_per_image': True}, 'frozen_scene': {'image_to_text_recall_at_1_itm_probability': 1.0, 'text_to_image_recall_at_1_itm_probability': 1.0, 'image_to_text_recall_at_1_cosine': 1.0, 'text_to_image_recall_at_1_cosine': 1.0}, 'verdict': 'sample-sanity'}
+[colab] Executing cell 10/13 - blip_itm-21...
+{'chance_baseline': {'i2t_recall_at_1': 0.003, 'i2t_recall_at_5': 0.013, 'i2t_recall_at_10': 0.025, 't2i_recall_at_1': 0.003, 't2i_recall_at_5': 0.013, 't2i_recall_at_10': 0.026, 'rsum': 0.082}, 'n': 391, 'note': 'chance (analytical expectation of a random ranking)'}
+{'colour_keyword_baseline': {'i2t_recall_at_1': 0.008, 'i2t_recall_at_5': 0.026, 'i2t_recall_at_10': 0.043, 't2i_recall_at_1': 0.008, 't2i_recall_at_5': 0.017, 't2i_recall_at_10': 0.031, 'rsum': 0.132}, 'note': 'colour-keyword nearest neighbour (208 training photographs)'}
+{'frozen_model_test': {'i2t_recall_at_1': 0.742, 'i2t_recall_at_5': 0.905, 'i2t_recall_at_10': 0.944, 't2i_recall_at_1': 0.652, 't2i_recall_at_5': 0.863, 't2i_recall_at_10': 0.918, 'rsum': 5.024}, 'itm': {'itm_i2t_recall_at_1': 0.803, 'itm_t2i_recall_at_1': 0.708, 'itm_pair_accuracy': 0.683}, 'median_rank': [1.0, 1.0], 'n': [391, 1737], 'verdict': 'measured', 'adapted': False, 'seconds': 64.0}
+{'frozen_above_baselines': {'chance': True, 'colour_keyword': True}}
+{'definitions': {'i2t_recall_at_k': 'fraction of photographs with at least one of their own captions among the top-k captions of the gallery under the score; in 0..1', 't2i_recall_at_k': 'fraction of captions whose own photograph is among the top-k photographs; in 0..1', 'median_rank': 'median over queries of the rank (1-based) of the first correct candidate', 'rsum': 'i2t R@1 + R@5 + R@10 + t2i R@1 + R@5 + R@10; in 0..6', 'itm_pair_accuracy': "fraction of photographs whose query caption receives a higher ITM match probability than the hardest wrong caption (highest ITC cosine among other photographs' captions); chance 0.5"}}
+{'by_category_frozen': {'no-text': {'n': 160, 'i2t_recall_at_1': 0.8125, 't2i_recall_at_1': 0.7754172989377845, 'rsum': 5.401783004552352}, 'text': {'n': 231, 'i2t_recall_at_1': 0.7316017316017316, 't2i_recall_at_1': 0.6280148423005566, 'rsum': 4.953927025355597}}}
+[colab] Executing cell 11/13 - blip_itm-23...
+{'epoch': 0, 'train_loss': None, 'val_i2t_recall_at_1': 0.95, 'val_t2i_recall_at_1': 0.916, 'val_rsum': 5.816, 'note': 'frozen model'}
+{'epoch': 1, 'train_loss': 0.6244, 'val_i2t_recall_at_1': 0.95, 'val_t2i_recall_at_1': 0.911, 'val_rsum': 5.855}
+{'epoch': 2, 'train_loss': 0.4793, 'val_i2t_recall_at_1': 0.975, 'val_t2i_recall_at_1': 0.916, 'val_rsum': 5.886}
+{'epoch': 3, 'train_loss': 0.4025, 'val_i2t_recall_at_1': 0.95, 'val_t2i_recall_at_1': 0.916, 'val_rsum': 5.861}
+{'epoch': 4, 'train_loss': 0.3529, 'val_i2t_recall_at_1': 0.95, 'val_t2i_recall_at_1': 0.916, 'val_rsum': 5.861}
+{'trainable_parameters': 19298818, 'total_parameters': 223744258, 'training_pairs': 888, 'itc_temperature': 0.07, 'best_epoch': 2, 'selection': 'highest validation rsum (ITC cosine)', 'selection_split': 'validation', 'seconds': 157.3}
+[colab] Executing cell 12/13 - blip_itm-25...
+{'i2t_recall_at_1': {'chance': 0.003, 'neighbour': 0.008, 'frozen': 0.742, 'adapted': 0.79}}
+{'i2t_recall_at_5': {'chance': 0.013, 'neighbour': 0.026, 'frozen': 0.905, 'adapted': 0.939}}
+{'i2t_recall_at_10': {'chance': 0.025, 'neighbour': 0.043, 'frozen': 0.944, 'adapted': 0.962}}
+{'t2i_recall_at_1': {'chance': 0.003, 'neighbour': 0.008, 'frozen': 0.652, 'adapted': 0.672}}
+{'t2i_recall_at_5': {'chance': 0.013, 'neighbour': 0.017, 'frozen': 0.863, 'adapted': 0.877}}
+{'t2i_recall_at_10': {'chance': 0.026, 'neighbour': 0.031, 'frozen': 0.918, 'adapted': 0.918}}
+{'rsum': {'chance': 0.082, 'neighbour': 0.132, 'frozen': 5.024, 'adapted': 5.157}}
+{'itm': {'itm_i2t_recall_at_1': {'frozen': 0.803, 'adapted': 0.841}, 'itm_t2i_recall_at_1': {'frozen': 0.708, 'adapted': 0.701}, 'itm_pair_accuracy': {'frozen': 0.683, 'adapted': 0.683}}}
+{'median_rank': {'frozen': [1.0, 1.0], 'adapted': [1.0, 1.0]}}
+{'delta_vs_frozen': {'i2t_recall_at_1': 0.049, 'i2t_recall_at_5': 0.033, 'i2t_recall_at_10': 0.018, 't2i_recall_at_1': 0.02, 't2i_recall_at_5': 0.014, 't2i_recall_at_10': 0.001, 'rsum': 0.134, 'itm_i2t_recall_at_1': 0.038, 'itm_t2i_recall_at_1': -0.008, 'itm_pair_accuracy': 0.0}}
+{'by_category': {'no-text': {'n': 160, 'frozen': [0.812, 0.775], 'adapted': [0.812, 0.786]}, 'text': {'n': 231, 'frozen': [0.732, 0.628], 'adapted': [0.801, 0.643]}}}
+{'best_epoch': 2, 'verdict': 'improved: the adapted test rsum is 0.134 above the frozen one (optimistic: the recipe comparisons and the gallery size were decided with test numbers)'}
+run   data layers epochs       lr rerank best  frozen adapted   delta
+  1 sample      2      4    2e-05      5    2   5.024   5.157   0.134
+{'report': 'outputs/blip_itm_evaluation_report.json'}
+[colab] Executing cell 13/13 - blip_itm-27...
+adapted itm_probability [image][text]:
+[[0.992 0.001 0.   ]
+ [0.007 0.65  0.003]
+ [0.    0.    0.39 ]]
+{'scene_after_adaptation': {'image_to_text_recall_at_1_itm_probability': 1.0, 'text_to_image_recall_at_1_itm_probability': 1.0, 'image_to_text_recall_at_1_cosine': 1.0, 'text_to_image_recall_at_1_cosine': 1.0}, 'verdict': 'sample-sanity'}
+{'artifact': 'outputs/blip_itm_adapter', 'format': 'org.valcorza.blip-itm-base-coco.adapter.v1', 'tensors': 58, 'bytes': 77202384, 'sha256': '7d5f281822906b7b...', 'best_epoch': 2}
+{'reload_parity': {'identical_scores': 64, 'of': 64}, 'reloaded_best_epoch': 2}
+['blip_itm_adapter', 'blip_itm_evaluation_report.json', 'blip_itm_input_manifest.json', 'blip_itm_result.json', 'blip_itm_scores.csv', 'blip_itm_train.jsonl']
+[colab] Saving notebook with outputs to '/home/kurt/colab-runs/blip-itm-pipeline-63a18e0-34d898/blip_itm_colab_63a18e0_colab-cli-t4_output.ipynb'...
