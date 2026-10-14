@@ -279,6 +279,46 @@ def read_group(group):
         })
     return rows
 
+NEAR_DUP_HAMMING=10  # 64-bit dHash: pairs at Hamming distance <= 10 of 64 bits are reported
+NEAR_DUP_ROLES=("train","validation","test")
+
+
+def dhash64(path):
+    """64-bit difference hash: grayscale, 9x8 LANCZOS resize, one bit per horizontal gradient sign."""
+    with Image.open(path) as im:
+        small=im.convert("L").resize((9,8),Image.Resampling.LANCZOS)
+    px=np.asarray(small,dtype=np.int16)
+    bits=(px[:,:-1]>px[:,1:]).ravel()
+    return int(sum(1<<i for i,bit in enumerate(bits) if bit))
+
+
+def near_duplicate_audit(roles,threshold=NEAR_DUP_HAMMING):
+    """Count photograph pairs within `threshold` dHash bits, per role pair (within and across roles).
+    Display and provenance only: it never changes the split."""
+    items=[(role,r["image_id"],dhash64(r["path"])) for role in NEAR_DUP_ROLES for r in roles[role]]
+    hashes=np.asarray([h for _role,_id,h in items],dtype=np.uint64)
+    x=hashes[:,None]^hashes[None,:]
+    dist=np.zeros(x.shape,dtype=np.int64)
+    for k in range(64):
+        dist+=((x>>np.uint64(k))&np.uint64(1)).astype(np.int64)
+    keys=[f"{a}-{b}" for i,a in enumerate(NEAR_DUP_ROLES) for b in NEAR_DUP_ROLES[i:]]
+    counts={k:0 for k in keys};minimum={k:None for k in keys};pairs=[]
+    n=len(items)
+    for i in range(n):
+        for j in range(i+1,n):
+            a,b=sorted((items[i][0],items[j][0]),key=NEAR_DUP_ROLES.index)
+            key=f"{a}-{b}";d=int(dist[i,j])
+            minimum[key]=d if minimum[key] is None else min(minimum[key],d)
+            if d<=threshold:
+                counts[key]+=1
+                pairs.append({"role_a":items[i][0],"id_a":items[i][1],"role_b":items[j][0],"id_b":items[j][1],
+                              "hamming":d})
+    cross=sum(v for k,v in counts.items() if k.split("-")[0]!=k.split("-")[1])
+    return {"method":"64-bit dHash (grayscale, 9x8 LANCZOS, horizontal gradient)","threshold_hamming":threshold,
+            "photographs":n,"pair_counts":counts,"min_hamming":minimum,"cross_role_pairs":cross,
+            "pairs":sorted(pairs,key=lambda p:(p["hamming"],p["id_a"],p["id_b"]))}
+
+
 def gallery(records):
     texts=[];owners=[]
     for i,r in enumerate(records):
@@ -344,15 +384,40 @@ def exact_mcnemar_p(only_a,only_b):
     tail=sum(comb(n,i) for i in range(min(int(only_a),int(only_b))+1))
     return min(1.0,2*tail/2**n)
 
-def paired_counts(a_hits,b_hits):
-    """Same-query comparison of two hit vectors: concordant and discordant counts plus the exact test."""
+BOOTSTRAP_SEED=0
+BOOTSTRAP_RESAMPLES=2000
+
+
+def photograph_bootstrap_pp(a,b,clusters,seed=BOOTSTRAP_SEED,resamples=BOOTSTRAP_RESAMPLES):
+    """95% percentile interval of the R@1 difference (a - b, percentage points), resampling photographs:
+    every query of a resampled photograph comes with it, so captions of one photograph stay together."""
+    clusters=np.asarray(clusters)
+    _ids,index=np.unique(clusters,return_inverse=True)
+    diff_sum=np.bincount(index,weights=a.astype(float)-b.astype(float))
+    size=np.bincount(index).astype(float)
+    pick=np.random.default_rng(seed).integers(0,len(size),size=(resamples,len(size)))
+    values=100*diff_sum[pick].sum(axis=1)/size[pick].sum(axis=1)
+    return float(np.percentile(values,2.5)),float(np.percentile(values,97.5))
+
+
+def paired_counts(a_hits,b_hits,clusters=None,interval=False):
+    """Same-query comparison of two hit vectors: concordant and discordant counts plus the exact binomial
+    (McNemar) calculation. With interval=True, adds the difference in percentage points and a seeded
+    photograph-bootstrap 95% interval (clusters = owning photograph of each query; default one per query)."""
     a=np.asarray(a_hits,dtype=bool);b=np.asarray(b_hits,dtype=bool)
     if a.shape!=b.shape or a.ndim!=1:raise ValueError("a paired comparison needs one hit per query, same queries")
     only_a=int(np.sum(a&~b));only_b=int(np.sum(~a&b))
-    return {"queries":int(a.size),"a_r1":float(a.mean()) if a.size else float("nan"),
-            "b_r1":float(b.mean()) if b.size else float("nan"),"both_correct":int(np.sum(a&b)),
-            "only_a":only_a,"only_b":only_b,"neither":int(np.sum(~a&~b)),"gap_queries":only_a-only_b,
-            "exact_mcnemar_p":exact_mcnemar_p(only_a,only_b)}
+    out={"queries":int(a.size),"a_r1":float(a.mean()) if a.size else float("nan"),
+         "b_r1":float(b.mean()) if b.size else float("nan"),"both_correct":int(np.sum(a&b)),
+         "only_a":only_a,"only_b":only_b,"neither":int(np.sum(~a&~b)),"gap_queries":only_a-only_b,
+         "exact_mcnemar_p":exact_mcnemar_p(only_a,only_b)}
+    if interval:
+        groups=np.arange(a.size) if clusters is None else np.asarray(clusters)
+        if groups.shape!=a.shape:raise ValueError("one cluster id per query")
+        low,high=photograph_bootstrap_pp(a,b,groups)
+        out.update(difference_pp=100*(out["a_r1"]-out["b_r1"]),ci95_low_pp=low,ci95_high_pp=high,
+                   bootstrap_photographs=int(len(np.unique(groups))))
+    return out
 
 def expected_recall(n,total_positives,k):
     if k>=n:return 1.0
@@ -1209,11 +1274,18 @@ def stage_split(args):
         json.dumps(dataset_manifest["roles"],sort_keys=True,separators=(",",":")).encode()
     ).hexdigest()
 
+    # Near-duplicate audit (SVR2-m5): added after the role digest, so the digest and the split are unchanged.
+    audit=near_duplicate_audit({"train":train_records,"validation":validation_records,"test":test_records})
+    dataset_manifest["near_duplicate_audit"]=audit
+    pd.DataFrame([{"role_pair":k,"pairs_within_threshold":v,"min_hamming":audit["min_hamming"][k]}
+                  for k,v in audit["pair_counts"].items()]).to_csv(OUTPUT_ROOT/"data"/"near_duplicate_audit.csv",index=False)
     (OUTPUT_ROOT/"data"/"dataset_manifest.json").write_text(
         json.dumps(dataset_manifest,indent=2),encoding="utf-8"
     )
     write_state("records.json",{"train":train_records,"validation":validation_records,"test":test_records})
     print("role_digest",dataset_manifest["role_digest"])
+    print("near-duplicate audit (dHash, Hamming <=",audit["threshold_hamming"],"):",audit["pair_counts"],
+          "| cross-role pairs:",audit["cross_role_pairs"])
 
 
 @stage("models")
@@ -1555,12 +1627,13 @@ def stage_paired_evidence(args):
     top1={name:full_gallery_top1_hits(grid,test_owners) for name,grid in grids.items()}
     rows=[]
     for a,b in pairs:
-        for measure,pick in [
-            ("coarse I2T R@1 (every photograph)",lambda h:h[0]),
-            ("coarse T2I R@1 (all captions)",lambda h:h[1]),
-            ("coarse T2I R@1 (first caption per photograph)",lambda h:h[1][canonical]),
+        for measure in [
+            ("coarse I2T R@1 (every photograph)",lambda h:h[0],None,"photograph"),
+            ("coarse T2I R@1 (all captions)",lambda h:h[1],test_owners,"caption, clustered by photograph"),
+            ("coarse T2I R@1 (first caption per photograph)",lambda h:h[1][canonical],None,"photograph"),
         ]:
-            rows.append({"comparison":f"{a} vs {b}","measure":measure,**paired_counts(pick(top1[a]),pick(top1[b]))})
+            rows.append({"comparison":f"{a} vs {b}","measure":measure[0],"query_unit":measure[3],
+                         **paired_counts(measure[1](top1[a]),measure[1](top1[b]),clusters=measure[2],interval=True)})
     hits_path=this_run_file(state_path("rerank_hits.npz"))
     if hits_path:
         reranked=np.load(hits_path,allow_pickle=False)
@@ -1568,16 +1641,20 @@ def stage_paired_evidence(args):
             for view,label in [("itm_i2t","reranked I2T R@1 (every photograph)"),
                                ("itm_t2i","reranked T2I R@1 (first caption per photograph)")]:
                 rows.append({"comparison":f"{a} vs {b} candidates, same ITM reranker","measure":label,
-                             **paired_counts(reranked[f"{a}_{view}"],reranked[f"{b}_{view}"])})
+                             "query_unit":"photograph",
+                             **paired_counts(reranked[f"{a}_{view}"],reranked[f"{b}_{view}"],interval=True)})
         for source in ("siglip_v1","siglip2","blip_itc"):
             for direction in ("i2t","t2i"):
                 rows.append({"comparison":f"ITM rerank vs coarse ({source} candidates)",
                              "measure":f"{direction.upper()} R@1, same queries (only_a = fixed, only_b = broken)",
+                             "query_unit":"photograph",
                              **paired_counts(reranked[f"{source}_itm_{direction}"],
-                                             reranked[f"{source}_coarse_{direction}"])})
+                                             reranked[f"{source}_coarse_{direction}"],interval=True)})
     table=pd.DataFrame(rows)
     table.to_csv(OUTPUT_ROOT/"test"/"paired_comparisons.csv",index=False)
-    print(f"{len(table)} paired comparisons; exact_mcnemar_p is two-sided and unadjusted for multiple comparisons.")
+    print(f"{len(table)} exploratory paired comparisons. difference_pp and its photograph-bootstrap interval "
+          f"({BOOTSTRAP_RESAMPLES} resamples, seed {BOOTSTRAP_SEED}) describe this gallery; exact_mcnemar_p is the "
+          "exact binomial calculation, assumes independent queries and is unadjusted for multiple comparisons.")
     show(table)
 
 
@@ -1643,6 +1720,32 @@ def stage_gallery_size(args):
     gallery_table.to_csv(OUTPUT_ROOT/"test"/"gallery_size_metrics.csv",index=False)
     write_state("gallery_rows.json",gallery_rows)
     show(gallery_table)
+
+
+CORE_TEST_IMAGES=70
+
+
+@stage("gallery-size-fixed-queries")
+def stage_gallery_size_fixed_queries(args):
+    """Display-only companion to the nested gallery-size table: the queries stay the 70 core test photographs
+    and their captions at every size, and only the candidate gallery grows (nested prefixes)."""
+    test_records=records()["test"]
+    _texts,owners=gallery(test_records)
+    owners=np.asarray(owners,dtype=int)
+    core_caps=int(np.sum(owners<CORE_TEST_IMAGES))
+    rows=[]
+    for n in GALLERY_SIZES:
+        n_caps=int(np.sum(owners<n))
+        for name,scores in test_score_grids():
+            sub=np.asarray(scores,dtype=np.float64)[:n,:n_caps]
+            i2t=[owners[int(np.argsort(-sub[i],kind="stable")[0])]==i for i in range(CORE_TEST_IMAGES)]
+            t2i=[int(np.argsort(-sub[:,j],kind="stable")[0])==owners[j] for j in range(core_caps)]
+            rows.append({"gallery_images":n,"candidate_captions":n_caps,"query_photographs":CORE_TEST_IMAGES,
+                         "query_captions":core_caps,"model":name,"chance_t2i_r1":1/n,
+                         "i2t_r1":float(np.mean(i2t)),"t2i_r1":float(np.mean(t2i))})
+    table=pd.DataFrame(rows)
+    table.to_csv(OUTPUT_ROOT/"test"/"gallery_size_fixed_queries.csv",index=False)
+    show(table)
 
 
 def category_tables(test_records,test_owners,test_texts,train_records,grids):
@@ -2050,10 +2153,11 @@ def stage_report(args):
         "blip_reload":blip_reload_parity,
         "index_manifest":index_manifest,
         "environment":read_state("environment.json"),
-        "evidence_scope":"one seeded VizWiz-Captions sample; 391-image / 1,737-caption gallery held out from this notebook's train and validation roles; pretraining overlap with SigLIP, SigLIP 2 or BLIP data cannot be ruled out; cross-role near-duplicate photographs are not measured",
+        "evidence_scope":"one seeded VizWiz-Captions sample; 391-image / 1,737-caption gallery held out from this notebook's train and validation roles; pretraining overlap with SigLIP, SigLIP 2 or BLIP data cannot be ruled out; near-duplicate photographs audited by 64-bit dHash (see dataset.near_duplicate_audit)",
         "byod_run_directory":str(byod_run_dir) if byod_run_dir else None,
         "bundle_policy":"files under OUTPUT_DIR written since this Run all started (RUN_STARTED)",
         "release_gates":[
+            "fresh T4 STANDARD Run all of this notebook blob",
             "fresh T4 FULL Run all",
             "browser BYOD run with one valid and one refused archive (REL12)",
             "record peak VRAM and exact released-notebook wall times",

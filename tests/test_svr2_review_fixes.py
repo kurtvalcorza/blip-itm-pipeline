@@ -117,6 +117,16 @@ def test_paired_evidence_stage_reproduces_every_reported_r1(tmp_path):
     assert ((table["only_a"] - table["only_b"]) == table["gap_queries"]).all()
     assert np.allclose(table["gap_queries"] / table["queries"], table["a_r1"] - table["b_r1"])
     assert table["exact_mcnemar_p"].between(0, 1).all()
+    # Percentage-point difference inside its seeded photograph-bootstrap interval.
+    assert np.allclose(table["difference_pp"], 100 * (table["a_r1"] - table["b_r1"]))
+    assert (table["ci95_low_pp"] <= table["difference_pp"] + 1e-9).all()
+    assert (table["difference_pp"] <= table["ci95_high_pp"] + 1e-9).all()
+    clustered = table[table["query_unit"] == "caption, clustered by photograph"]
+    assert len(clustered) == 3 and (clustered["bootstrap_photographs"] == 12).all()
+    assert (clustered["queries"] == 24).all()
+    again = load_stages(tmp_path, RUN_STARTED=0.0)
+    again["STAGES"]["paired-evidence"](types.SimpleNamespace(model=None, k=5))
+    assert pd.read_csv(tmp_path / "out" / "test" / "paired_comparisons.csv").equals(table)  # seeded
 
 
 def test_section_18_and_figures_ask_for_paired_evidence():
@@ -211,7 +221,9 @@ def test_comparison_scope_is_disclosed():
     exercise_d = src("3b012ccb").split("### Exercise D")[1].split("### Exercise E")[0]
     assert "whole-checkpoint difference, not an effect of embedding size" in exercise_d
     assert "The model comparison is whole-checkpoint" in src("63ebfe7c")
-    assert "paired discordant counts" in src("guided-03")
+    guided = src("guided-03")
+    assert "photograph-bootstrap interval" in guided and "exploratory" in guided
+    assert "beats another" not in guided and "p-value" not in guided
 
 
 # ---- SVR2-m1: a refused BYOD archive ------------------------------------------------------------
@@ -273,18 +285,24 @@ def test_spec_2_5_use_notice_and_kind():
 def test_release_gates_and_evidence_scope(tmp_path):
     stage_text = carried_files()["retrieval_workshop.py"]
     gates = stage_text.split('"release_gates":[')[1].split("]")[0]
-    assert "STANDARD Run all" not in gates and "FULL Run all" in gates and "REL12" in gates
+    # Peer-review follow-up: the new blob's own STANDARD run is a gate again, beside FULL and BYOD.
+    assert "STANDARD Run all of this notebook blob" in gates and "FULL Run all" in gates and "REL12" in gates
     scope = stage_text.split('"evidence_scope":"')[1].split('"')[0]
     assert "overlap" in scope and "near-duplicate" in scope
     assert '"workshop_revision":"0.4.0-candidate"' in stage_text
 
 
-def test_near_duplicates_and_single_relevant_item_are_stated():
-    assert "Near-duplicates across roles are not measured" in src("472e7ac5")
-    assert "near-duplicate" in src("1bef037d")
+def test_near_duplicates_and_annotated_owner_relevance_are_stated():
+    s4 = src("472e7ac5")
+    assert "Near-duplicate audit" in s4 and "not measured" not in s4 and "affects only" not in s4
+    assert "primarily threaten the `FULL` adaptation result" in s4 and "The split is unchanged" in s4
+    assert "near-duplicate audit" in src("1bef037d")
     s5 = src("71516f81")
-    assert "exactly one correct photograph" in s5 and "5 of the 1,737" in s5
-    assert "does not recompute it" in s5
+    assert "T2I uses one annotated positive image per caption; I2T uses all captions attached to that image." in s5
+    assert "Other candidates may also be relevant but are unlabelled" in s5 and "annotated-owner retrieval" in s5
+    assert "no conclusion" not in s5 and "One correct item" not in s5
+    assert "ranges from 0 to 6" in s5 and "0–6 here" in src("a46a54b6")
+    assert "MRR" not in markdown()  # the workshop does not promise MRR
 
 
 def test_notebook_file_is_lf_only():
@@ -292,3 +310,70 @@ def test_notebook_file_is_lf_only():
                         "DIMER_MultiModel_Vision_Language_Retrieval_Workshop.ipynb")
     with open(path, "rb") as handle:
         assert b"\r" not in handle.read()
+
+
+# ---- Peer-review follow-up: near-duplicate audit (SVR2-m5 = MEASURE), fixed-query gallery size --------
+
+
+def test_dhash_audit_counts_pairs_per_role_pair(tmp_path):
+    ns = load_stages(tmp_path)
+    rng = np.random.default_rng(0)
+    base = (rng.random((64, 64)) * 255).astype(np.uint8)
+    def save(name, array):
+        path = tmp_path / f"{name}.png"
+        Image.fromarray(array).convert("RGB").save(path)
+        return {"image_id": name, "path": str(path)}
+    roles = {
+        "train": [save("t0", base), save("t1", (rng.random((64, 64)) * 255).astype(np.uint8))],
+        "validation": [save("v0", (rng.random((64, 64)) * 255).astype(np.uint8))],
+        "test": [save("x0", np.clip(base.astype(int) + 2, 0, 255).astype(np.uint8)),
+                 save("x1", (rng.random((64, 64)) * 255).astype(np.uint8))],
+    }
+    audit = ns["near_duplicate_audit"](roles)
+    assert audit["threshold_hamming"] == 10 and audit["photographs"] == 5
+    assert audit["pair_counts"]["train-test"] == 1 and audit["cross_role_pairs"] == 1
+    assert audit["pairs"][0]["id_a"] == "t0" and audit["pairs"][0]["id_b"] == "x0"
+    assert set(audit["pair_counts"]) == {"train-train", "train-validation", "train-test",
+                                         "validation-validation", "validation-test", "test-test"}
+
+
+def test_audit_is_display_only_and_wired_into_the_split():
+    stage_text = carried_files()["retrieval_workshop.py"]
+    split = stage_text[stage_text.index("def stage_split"):stage_text.index('@stage("models")')]
+    # Added after the role digest is computed: the digest and the split cannot change.
+    assert split.index('dataset_manifest["role_digest"]=') < split.index("near_duplicate_audit(")
+    assert "near_duplicate_audit.csv" in split
+    assert "near_duplicate_audit.csv" in src("8f39c22b")
+
+
+def test_fixed_query_gallery_never_rises_and_matches_the_core_gallery(tmp_path):
+    ns = load_stages(tmp_path, GALLERY_SIZES=(70, 128, 256, 391))
+    rng = np.random.default_rng(5)
+    records = [{"image_id": f"i{i}", "captions": [f"w{i} a", f"w{i} b"], "category": "x"} for i in range(391)]
+    owners = [i for i in range(391) for _ in range(2)]
+    match = np.arange(391)[:, None] == np.asarray(owners)
+    for name in ("siglip1", "siglip2", "blip_itc"):
+        ns["save_scores"](f"test_{name}", rng.normal(size=(391, 782)) + 2.0 * match)
+    ns["write_state"]("records.json", {"train": records, "validation": records, "test": records})
+    ns["STAGES"]["gallery-size-fixed-queries"](types.SimpleNamespace(model=None, k=5))
+    table = pd.read_csv(tmp_path / "out" / "test" / "gallery_size_fixed_queries.csv")
+    assert set(table["query_photographs"]) == {70} and set(table["query_captions"]) == {140}
+    for model, rows in table.groupby("model"):
+        rows = rows.sort_values("gallery_images")
+        assert rows["i2t_r1"].is_monotonic_decreasing and rows["t2i_r1"].is_monotonic_decreasing
+        key = {"siglip_v1": "siglip1"}.get(model, model)
+        core = ns["retrieval_metrics"](ns["load_scores"](f"test_{key}")[:70, :140], owners[:140])
+        first = rows.iloc[0]
+        assert first["i2t_r1"] == pytest.approx(core["i2t_recall_at_1"])
+        assert first["t2i_r1"] == pytest.approx(core["t2i_recall_at_1"])
+
+
+def test_gallery_size_text_no_longer_claims_a_single_factor():
+    s20 = src("5333fe70")
+    assert "only the number of candidates changes" not in s20 and "falls as distractors" not in s20
+    assert "candidates **and queries**" in s20
+    assert IDS.index("6ae280da") < IDS.index("svr2-gallery-fixed") < IDS.index("a52dedc6")
+    assert 'run_stage("gallery-size-fixed-queries")' in src("svr2-gallery-fixed")
+    paired = src("svr2-paired-md")
+    assert "does **not** demonstrate that two models are equivalent" in paired
+    assert "exploratory" in paired and '"Exact" refers to the binomial calculation' in paired
