@@ -111,7 +111,7 @@ BLIP = {
     "dim":256,
 }
 # Sensitivity row (SVR2-M1): the same BLIP ITM base architecture and 384x384 input, fine-tuned for
-# image-text retrieval on Flickr30k instead of COCO. Revision, licence, sizes and SHA-256 (the LFS oid
+# image-text retrieval on Flickr30k (per its model card). Revision, licence, sizes and SHA-256 (the LFS oid
 # for the weight) were read from the Hugging Face Hub on 2026-10-14.
 BLIP_FLICKR = {
     "model_id":"Salesforce/blip-itm-base-flickr",
@@ -1456,8 +1456,8 @@ def stage_retrieval_table(args):
 
 @stage("flickr-sensitivity")
 def stage_flickr_sensitivity(args):
-    """SVR2-M1 sensitivity row: BLIP ITM Base fine-tuned on Flickr30k instead of COCO (same architecture,
-    same 384x384 input), scored as a frozen ITC retriever on the same test gallery and queries. It adds a
+    """SVR2-M1 sensitivity row: BLIP ITM Base fine-tuned for retrieval on Flickr30k (same architecture,
+    tokenizer and 384x384 input as the COCO checkpoint), scored as a frozen ITC retriever on the same test gallery and queries. It adds a
     row and a CSV; no earlier table, index, figure or summary value changes."""
     global hf_hub_download
     require_frozen()
