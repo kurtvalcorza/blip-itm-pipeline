@@ -236,11 +236,13 @@ def test_byod_disabled_leaves_no_run_dir(tmp_path):
 
 
 @pytest.mark.parametrize("path, needle", [("", "BYOD_ZIP_PATH is empty"), ("missing.zip", "not a file")])
-def test_byod_path_errors_are_actionable(tmp_path, path, needle):
+def test_byod_path_errors_are_actionable(tmp_path, capsys, path, needle):
+    # SVR2-m1: a path problem is one printed refusal, not an exception from the cell.
     host = host_ns(byod_ns(tmp_path), USE_BYOD=True, BYOD_ZIP_PATH=path)
-    with pytest.raises(ValueError, match=needle) as info:
-        exec(src("05f2bcd3"), host)
-    assert "BYOD_ZIP_PATH" in str(info.value) and host["calls"] == []
+    exec(src("05f2bcd3"), host)
+    out = capsys.readouterr().out
+    assert out.count("BYOD archive refused") == 1 and needle in out and "BYOD_ZIP_PATH" in out
+    assert host["calls"] == [] and host["byod_run_dir"] is None and host["shown"] == []
 
 
 @pytest.mark.parametrize(
@@ -264,16 +266,16 @@ def test_byod_validation_names_the_offender(tmp_path, change, needle):
     assert "outside16" not in text and "At most100" not in text
 
 
-def test_rejected_archive_stops_before_any_model_loads(tmp_path):
+def test_rejected_archive_stops_before_any_model_loads(tmp_path, capsys):
     path = make_archive(tmp_path, lambda r, i: r[1].update(split="holdout"), name="bad.zip")
     ns = byod_ns(tmp_path, path=path)
     loaded = []
     ns["BlipWorkshop"] = lambda *a, **k: loaded.append("blip")
     ns["siglip_embed"] = lambda *a, **k: loaded.append("siglip")
     host = host_ns(ns, USE_BYOD=True, BYOD_ZIP_PATH=str(path))
-    with pytest.raises(ValueError, match="records.jsonl line 2"):
-        exec(src("05f2bcd3"), host)
-    assert loaded == []
+    exec(src("05f2bcd3"), host)  # SVR2-m1: one printed refusal, no exception
+    assert capsys.readouterr().out.count("records.jsonl line 2") == 1
+    assert loaded == [] and host["byod_run_dir"] is None
 
 
 def test_byod_markdown_explains_how_to_supply_the_archive():
