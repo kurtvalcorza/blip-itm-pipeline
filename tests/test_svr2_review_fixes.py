@@ -10,6 +10,7 @@ import json
 import os
 import types
 import zipfile
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -19,6 +20,7 @@ from PIL import Image
 from retrieval_workshop_support import NB, carried_files, host_ns, load_stages, src
 
 IDS = [c["id"] for c in NB["cells"]]
+NOTEBOOK_ROOT = Path(__file__).resolve().parents[1]
 
 
 def markdown() -> str:
@@ -377,3 +379,15 @@ def test_gallery_size_text_no_longer_claims_a_single_factor():
     paired = src("svr2-paired-md")
     assert "does **not** demonstrate that two models are equivalent" in paired
     assert "exploratory" in paired and '"Exact" refers to the binomial calculation' in paired
+
+
+def test_stronger_near_duplicate_review_is_recorded():
+    review = NB["metadata"]["dimer"]["near_duplicate_review"]
+    assert review["split_changed"] is False and "SigLIP 2" in review["stronger_method"]
+    assert review["near_duplicates"]["train-test"] == ["29698/30231"]
+    assert review["near_duplicates"]["validation-test"] == ["29906/30181"]
+    record = NOTEBOOK_ROOT / review["record"]
+    data = json.loads(record.read_text(encoding="utf-8"))
+    assert data["split_changed"] is False and data["screen"]["cross_role_pairs"] == 58
+    s4 = src("472e7ac5")
+    assert "none of the 58 cross-role dHash pairs is a duplicate" in s4 and "`29906` / test `30181`" in s4

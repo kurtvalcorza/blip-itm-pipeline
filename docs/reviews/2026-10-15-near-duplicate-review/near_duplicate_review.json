@@ -1,0 +1,411 @@
+{
+ "date": "2026-10-15",
+ "scope": "all 639 photographs of the pinned split (208 train, 40 validation, 391 test); every pair",
+ "screen": {
+  "method": "64-bit dHash, Hamming <= 10 (the notebook's own audit)",
+  "cross_role_pairs": 58,
+  "within_test_pairs": 51,
+  "max_siglip2_cosine_of_dhash_cross_role_pairs": 0.9504,
+  "verdict": "0 of the 58 cross-role and 0 of the 51 within-test dHash pairs are duplicates (hash collisions on featureless photographs)"
+ },
+ "stronger_check": {
+  "method": {
+   "embedding": "SigLIP 2 base-patch16-224 @5ffaac51 image features, L2-normalised, cosine; CPU",
+   "embedding_threshold": 0.9,
+   "pixel": "global SSIM on 128x128 grayscale (LANCZOS) and normalised MSE on 128x128 RGB",
+   "ssim_threshold": 0.8,
+   "flag_rule": "cosine >= 0.90 and SSIM >= 0.80, then visual confirmation"
+  },
+  "photographs": 639,
+  "dhash_pairs_checked": 124,
+  "dhash_cross_role_pairs": 58,
+  "dhash_cross_role_max_cosine": 0.950375255651372,
+  "pairs_cosine_ge_threshold": {
+   "train-train": 13,
+   "train-validation": 2,
+   "train-test": 25,
+   "validation-validation": 0,
+   "validation-test": 5,
+   "test-test": 12
+  },
+  "flagged": {
+   "train-train": 2,
+   "train-validation": 0,
+   "train-test": 0,
+   "validation-validation": 0,
+   "validation-test": 0,
+   "test-test": 0
+  }
+ },
+ "automated_flag_result": "cosine >= 0.90 and SSIM >= 0.80 flagged 2 within-train pairs (train 29850-29965, 29850-29912), both near-black frames, not duplicates; re-photographs of a scene fall below the SSIM threshold, so every cross-role pair at cosine >= 0.90 was reviewed by eye",
+ "visual_review": {
+  "cross_role_pairs_reviewed": 32,
+  "within_test_pairs_reviewed": 12,
+  "near_duplicates": {
+   "validation-test": [
+    "29906-30181"
+   ],
+   "train-test": [
+    "29698-30231"
+   ],
+   "train-validation": []
+  },
+  "possible_same_object": 5,
+  "within_test_duplicates": 0
+ },
+ "cross_role_pairs_cosine_ge_0_90": [
+  {
+   "role_a": "validation",
+   "id_a": "29906",
+   "role_b": "test",
+   "id_b": "30181",
+   "cosine": 0.9723,
+   "ssim": 0.5115,
+   "nmse": 0.3506,
+   "dhash_hamming": null,
+   "visual_verdict": "near-duplicate: same scene re-photographed (fireplace)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29698",
+   "role_b": "test",
+   "id_b": "30231",
+   "cosine": 0.9627,
+   "ssim": 0.6721,
+   "nmse": 0.1659,
+   "dhash_hamming": null,
+   "visual_verdict": "near-duplicate: same object and scene, different crop (TV remote on the same table)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29790",
+   "role_b": "test",
+   "id_b": "30048",
+   "cosine": 0.9508,
+   "ssim": -0.0522,
+   "nmse": 0.173,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29850",
+   "role_b": "test",
+   "id_b": "30302",
+   "cosine": 0.9504,
+   "ssim": 0.038,
+   "nmse": 0.8491,
+   "dhash_hamming": 7,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29895",
+   "role_b": "test",
+   "id_b": "29666",
+   "cosine": 0.9494,
+   "ssim": 0.6893,
+   "nmse": 0.0843,
+   "dhash_hamming": null,
+   "visual_verdict": "possibly the same object from another view; not confirmable from the photographs"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29870",
+   "role_b": "test",
+   "id_b": "30242",
+   "cosine": 0.9486,
+   "ssim": 0.4273,
+   "nmse": 0.1824,
+   "dhash_hamming": null,
+   "visual_verdict": "possibly the same object from another view; not confirmable from the photographs"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29965",
+   "role_b": "test",
+   "id_b": "30302",
+   "cosine": 0.9435,
+   "ssim": 0.0299,
+   "nmse": 0.8258,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29790",
+   "role_b": "test",
+   "id_b": "30220",
+   "cosine": 0.9411,
+   "ssim": 0.0326,
+   "nmse": 0.5653,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29844",
+   "role_b": "test",
+   "id_b": "30252",
+   "cosine": 0.932,
+   "ssim": -0.176,
+   "nmse": 0.1502,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29870",
+   "role_b": "test",
+   "id_b": "30048",
+   "cosine": 0.9316,
+   "ssim": 0.2758,
+   "nmse": 0.1359,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29870",
+   "role_b": "validation",
+   "id_b": "29639",
+   "cosine": 0.9267,
+   "ssim": 0.272,
+   "nmse": 0.2569,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29937",
+   "role_b": "test",
+   "id_b": "30135",
+   "cosine": 0.9266,
+   "ssim": 0.2253,
+   "nmse": 0.0099,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "validation",
+   "id_a": "29639",
+   "role_b": "test",
+   "id_b": "30220",
+   "cosine": 0.9257,
+   "ssim": -0.1079,
+   "nmse": 0.6715,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29790",
+   "role_b": "test",
+   "id_b": "30242",
+   "cosine": 0.9256,
+   "ssim": -0.1065,
+   "nmse": 0.3051,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29870",
+   "role_b": "test",
+   "id_b": "30220",
+   "cosine": 0.9245,
+   "ssim": -0.0801,
+   "nmse": 0.6489,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29790",
+   "role_b": "validation",
+   "id_b": "29639",
+   "cosine": 0.9214,
+   "ssim": -0.1154,
+   "nmse": 0.3446,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29790",
+   "role_b": "test",
+   "id_b": "30015",
+   "cosine": 0.9182,
+   "ssim": -0.0474,
+   "nmse": 0.2508,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "validation",
+   "id_a": "29639",
+   "role_b": "test",
+   "id_b": "30015",
+   "cosine": 0.9175,
+   "ssim": -0.2501,
+   "nmse": 0.4148,
+   "dhash_hamming": null,
+   "visual_verdict": "possibly the same object from another view; not confirmable from the photographs"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29937",
+   "role_b": "test",
+   "id_b": "29996",
+   "cosine": 0.9122,
+   "ssim": -0.4919,
+   "nmse": 0.1692,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "validation",
+   "id_a": "29926",
+   "role_b": "test",
+   "id_b": "30135",
+   "cosine": 0.9109,
+   "ssim": 0.5618,
+   "nmse": 0.0039,
+   "dhash_hamming": 7,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "validation",
+   "id_a": "29639",
+   "role_b": "test",
+   "id_b": "30242",
+   "cosine": 0.9106,
+   "ssim": 0.4557,
+   "nmse": 0.2136,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29870",
+   "role_b": "test",
+   "id_b": "30183",
+   "cosine": 0.9103,
+   "ssim": 0.236,
+   "nmse": 0.4884,
+   "dhash_hamming": null,
+   "visual_verdict": "possibly the same object from another view; not confirmable from the photographs"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29912",
+   "role_b": "test",
+   "id_b": "30302",
+   "cosine": 0.9103,
+   "ssim": 0.0106,
+   "nmse": 0.9268,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29912",
+   "role_b": "test",
+   "id_b": "30102",
+   "cosine": 0.9067,
+   "ssim": 0.2643,
+   "nmse": 0.7474,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29945",
+   "role_b": "test",
+   "id_b": "29666",
+   "cosine": 0.9058,
+   "ssim": 0.2984,
+   "nmse": 0.2301,
+   "dhash_hamming": null,
+   "visual_verdict": "possibly the same object from another view; not confirmable from the photographs"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29667",
+   "role_b": "test",
+   "id_b": "30235",
+   "cosine": 0.904,
+   "ssim": -0.3055,
+   "nmse": 0.2751,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29730",
+   "role_b": "test",
+   "id_b": "29996",
+   "cosine": 0.9039,
+   "ssim": -0.0156,
+   "nmse": 0.8681,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29818",
+   "role_b": "test",
+   "id_b": "30079",
+   "cosine": 0.9038,
+   "ssim": 0.0978,
+   "nmse": 0.3376,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29723",
+   "role_b": "test",
+   "id_b": "30232",
+   "cosine": 0.9023,
+   "ssim": 0.0576,
+   "nmse": 0.7682,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29730",
+   "role_b": "test",
+   "id_b": "30135",
+   "cosine": 0.9023,
+   "ssim": 0.0716,
+   "nmse": 0.9104,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29723",
+   "role_b": "test",
+   "id_b": "30302",
+   "cosine": 0.9021,
+   "ssim": -0.0173,
+   "nmse": 0.8392,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  },
+  {
+   "role_a": "train",
+   "id_a": "29790",
+   "role_b": "test",
+   "id_b": "30099",
+   "cosine": 0.9017,
+   "ssim": 0.0232,
+   "nmse": 0.645,
+   "dhash_hamming": null,
+   "visual_verdict": "different photographs (featureless/blurred or same object category)"
+  }
+ ],
+ "split_changed": false
+}
