@@ -171,10 +171,13 @@ def test_markdown_and_metadata_state_the_platform_and_no_restart():
     assert "--require-hashes --only-binary :all:" in section
     dimer = NB["metadata"]["dimer"]
     assert dimer["runtime_environment"]["platform"].startswith("Linux x86_64 only")
-    assert NB["metadata"]["workshop_revision"] == "0.3.0-candidate"
+    assert NB["metadata"]["workshop_revision"] == "0.4.0-candidate"
     revisions = [r["revision"] for r in dimer["review_revisions"]]
-    assert revisions == ["0.2.0-candidate", "0.3.0-candidate"]
-    assert dimer["clean_runtime_evidence"] == "pending"
+    assert revisions == ["0.2.0-candidate", "0.3.0-candidate", "0.4.0-candidate"]
+    # Evidence is recorded per blob (SVR2-m4): the new revision has no hosted run of its own yet.
+    assert "954cf7bc" in dimer["clean_runtime_evidence"]
+    assert "0.4.0-candidate: pending" in dimer["clean_runtime_evidence"]
+    assert dimer["review_revisions"][-1]["clean_runtime_evidence"].startswith("pending")
 
 
 def test_cell_ids_are_unique_and_the_carrier_precedes_the_bootstrap():

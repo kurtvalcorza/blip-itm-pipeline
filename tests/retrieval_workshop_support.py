@@ -78,14 +78,19 @@ def host_ns(stages: dict, **extra) -> dict:
     exec(compile(module, "80193aa0", "exec"), ns)
     calls: list = []
 
-    def run_stage(stage, *options):
+    def run_stage(stage, *options, allow_refusal=False):
         calls.append((stage, *options))
         args = types.SimpleNamespace(model=None, k=5)
         for key, value in zip(options[::2], options[1::2], strict=True):
             setattr(args, key.lstrip("-"), int(value) if key == "--k" else value)
         stages["BYOD_ZIP_PATH"] = ns["BYOD_ZIP_PATH"]
         stages["WORKSHOP_TIER"] = ns["WORKSHOP_TIER"]
-        stages["STAGES"][stage](args)
+        code = stages["STAGES"][stage](args)
+        if code:
+            if allow_refusal and code == stages["BYOD_REFUSED"]:
+                return False
+            raise RuntimeError(f"{stage} failed with exit {code}")
+        return True
 
     ns["run_stage"] = run_stage
     ns["calls"] = calls

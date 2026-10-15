@@ -38,7 +38,7 @@ STAGE_FORMAT = "dimer.retrieval-workshop.stages.v1"
 WORKSHOP_TIER = "STANDARD"
 RERANK_TOP_K = 5
 RECALL_KS = (1, 5, 10)
-GALLERY_SIZES = (70, 128, 256, 391)
+GALLERY_SIZES = (70, 128, 256, 389)
 BLIP_EPOCHS = 4
 BLIP_LEARNING_RATE = 2e-5
 BLIP_BATCH_SIZE = 16
@@ -62,6 +62,7 @@ hf_hub_download = None
 SIGLIP2_ROOT = WORK_ROOT / "models" / "siglip2"
 SIGLIP1_ROOT = WORK_ROOT / "models" / "siglip1"
 BLIP_ROOT = WORK_ROOT / "models" / "blip"
+BLIP_FLICKR_ROOT = WORK_ROOT / "models" / "blip_flickr"
 
 # ---- Immutable model identities ---------------------------------------------------------------------
 SIGLIP2 = {
@@ -109,6 +110,25 @@ BLIP = {
     ],
     "dim":256,
 }
+# Sensitivity row (SVR2-M1): the same BLIP ITM base architecture and 384x384 input, fine-tuned for
+# image-text retrieval on Flickr30k (per its model card). Revision, licence, sizes and SHA-256 (the LFS oid
+# for the weight) were read from the Hugging Face Hub on 2026-10-14.
+BLIP_FLICKR = {
+    "model_id":"Salesforce/blip-itm-base-flickr",
+    "revision":"a492fd8ed0b301706ddd08a251a5574f959416ca",
+    "license":"bsd-3-clause",
+    "files":[
+        ("README.md",5505,"44918ad5059872ef5d377e8bd752fe1db6afbfdc7c1e4e1ceada8c0159581a70"),
+        ("config.json",4591,"9c63f0bf54c4683a7ad4ffb8c9846c7cb3d48130b2ba6620c43a7a7eaed0f9fd"),
+        ("preprocessor_config.json",445,"0aa66e2e9ac3ea3b5cd4388c35072e22db4e1cc1f96c7872bed07749c712ade1"),
+        ("pytorch_model.bin",895139697,"8d5e0fa9646853f11ba81db09b89f2265ed60ff1d7e69e594f46e103db391488"),
+        ("special_tokens_map.json",125,"b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3"),
+        ("tokenizer.json",711396,"d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66"),
+        ("tokenizer_config.json",456,"86da6fdb761b02f73a05561aba71711c2d7c205fe1fd1744046173a410263925"),
+        ("vocab.txt",231508,"07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3"),
+    ],
+    "dim":256,
+}
 
 # ---- Canonical corpus -------------------------------------------------------------------------------
 CORPUS_REPO="mm-eval/VizWiz-Captions"
@@ -119,12 +139,26 @@ CORPUS_SHA256="4492465a41d32b3c12b8b7b6a0cf7e0a0e202a5b825b006ca0c85dcdf24efd3e"
 
 ITC_TEMPERATURE=0.07
 
+# Pinned test exclusions (owner decision 2026-10-15). Each photograph is a near-duplicate of a photograph in
+# another role, found by the 2026-10-15 near-duplicate review (SigLIP 2 image-embedding cosine, SSIM and visual
+# check; record docs/reviews/2026-10-15-near-duplicate-review/near_duplicate_review.json). Both come from row
+# group 1 (test-only gallery additions), so train and validation are unchanged. Their captions leave with them.
+TEST_EXCLUSIONS={
+    "30231":{"duplicates":"train 29698","reason":"same TV remote on the same table, different crop",
+             "audit":"near_duplicate_review.json 2026-10-15 (cosine 0.963, SSIM 0.67)"},
+    "30181":{"duplicates":"validation 29906","reason":"same fireplace scene photographed twice",
+             "audit":"near_duplicate_review.json 2026-10-15 (cosine 0.972, SSIM 0.51)"},
+}
+TEST_IMAGES=389
+TEST_CAPTIONS=1729
+
 
 def configure(config):
     """Apply the notebook controls (a JSON object written by the notebook's run_stage)."""
     global WORKSHOP_TIER, RERANK_TOP_K, RECALL_KS, GALLERY_SIZES, BLIP_EPOCHS, BLIP_LEARNING_RATE
     global BLIP_BATCH_SIZE, BLIP_TRAINABLE_TEXT_LAYERS, SEED, SPLIT_SEED, OUTPUT_DIR, OUTPUT_ROOT
     global WORK_ROOT, BYOD_ZIP_PATH, RUN_STARTED, SIGLIP2_ROOT, SIGLIP1_ROOT, BLIP_ROOT
+    global BLIP_FLICKR_ROOT
     WORKSHOP_TIER = config["tier"]
     RERANK_TOP_K = int(config["rerank_top_k"])
     RECALL_KS = tuple(config["recall_ks"])
@@ -143,6 +177,7 @@ def configure(config):
     SIGLIP2_ROOT = WORK_ROOT / "models" / "siglip2"
     SIGLIP1_ROOT = WORK_ROOT / "models" / "siglip1"
     BLIP_ROOT = WORK_ROOT / "models" / "blip"
+    BLIP_FLICKR_ROOT = WORK_ROOT / "models" / "blip_flickr"
     if WORKSHOP_TIER not in {"STANDARD", "FULL"}:
         raise ValueError("WORKSHOP_TIER must be STANDARD or FULL")
     if RERANK_TOP_K not in (5, 10, 20):
@@ -167,7 +202,8 @@ def load_transformers():
 
 
 def model_root(name):
-    return {"siglip2":SIGLIP2_ROOT,"siglip1":SIGLIP1_ROOT,"blip":BLIP_ROOT}[name]
+    return {"siglip2":SIGLIP2_ROOT,"siglip1":SIGLIP1_ROOT,"blip":BLIP_ROOT,
+            "blip_flickr":BLIP_FLICKR_ROOT}[name]
 
 
 def state_path(name):
@@ -256,6 +292,46 @@ def read_group(group):
         })
     return rows
 
+NEAR_DUP_HAMMING=10  # 64-bit dHash: pairs at Hamming distance <= 10 of 64 bits are reported
+NEAR_DUP_ROLES=("train","validation","test")
+
+
+def dhash64(path):
+    """64-bit difference hash: grayscale, 9x8 LANCZOS resize, one bit per horizontal gradient sign."""
+    with Image.open(path) as im:
+        small=im.convert("L").resize((9,8),Image.Resampling.LANCZOS)
+    px=np.asarray(small,dtype=np.int16)
+    bits=(px[:,:-1]>px[:,1:]).ravel()
+    return int(sum(1<<i for i,bit in enumerate(bits) if bit))
+
+
+def near_duplicate_audit(roles,threshold=NEAR_DUP_HAMMING):
+    """Count photograph pairs within `threshold` dHash bits, per role pair (within and across roles).
+    Display and provenance only: it never changes the split."""
+    items=[(role,r["image_id"],dhash64(r["path"])) for role in NEAR_DUP_ROLES for r in roles[role]]
+    hashes=np.asarray([h for _role,_id,h in items],dtype=np.uint64)
+    x=hashes[:,None]^hashes[None,:]
+    dist=np.zeros(x.shape,dtype=np.int64)
+    for k in range(64):
+        dist+=((x>>np.uint64(k))&np.uint64(1)).astype(np.int64)
+    keys=[f"{a}-{b}" for i,a in enumerate(NEAR_DUP_ROLES) for b in NEAR_DUP_ROLES[i:]]
+    counts={k:0 for k in keys};minimum={k:None for k in keys};pairs=[]
+    n=len(items)
+    for i in range(n):
+        for j in range(i+1,n):
+            a,b=sorted((items[i][0],items[j][0]),key=NEAR_DUP_ROLES.index)
+            key=f"{a}-{b}";d=int(dist[i,j])
+            minimum[key]=d if minimum[key] is None else min(minimum[key],d)
+            if d<=threshold:
+                counts[key]+=1
+                pairs.append({"role_a":items[i][0],"id_a":items[i][1],"role_b":items[j][0],"id_b":items[j][1],
+                              "hamming":d})
+    cross=sum(v for k,v in counts.items() if k.split("-")[0]!=k.split("-")[1])
+    return {"method":"64-bit dHash (grayscale, 9x8 LANCZOS, horizontal gradient)","threshold_hamming":threshold,
+            "photographs":n,"pair_counts":counts,"min_hamming":minimum,"cross_role_pairs":cross,
+            "pairs":sorted(pairs,key=lambda p:(p["hamming"],p["id_a"],p["id_b"]))}
+
+
 def gallery(records):
     texts=[];owners=[]
     for i,r in enumerate(records):
@@ -313,6 +389,48 @@ def candidate_oracle(scores,owners,k):
         "i2t_candidate_oracle":float(np.mean(i2t)),
         "t2i_candidate_oracle":float(np.mean(t2i)),
     }
+
+def exact_mcnemar_p(only_a,only_b):
+    """Two-sided exact McNemar test: a binomial test of the discordant queries against p = 0.5."""
+    n=int(only_a)+int(only_b)
+    if n==0:return 1.0
+    tail=sum(comb(n,i) for i in range(min(int(only_a),int(only_b))+1))
+    return min(1.0,2*tail/2**n)
+
+BOOTSTRAP_SEED=0
+BOOTSTRAP_RESAMPLES=2000
+
+
+def photograph_bootstrap_pp(a,b,clusters,seed=BOOTSTRAP_SEED,resamples=BOOTSTRAP_RESAMPLES):
+    """95% percentile interval of the R@1 difference (a - b, percentage points), resampling photographs:
+    every query of a resampled photograph comes with it, so captions of one photograph stay together."""
+    clusters=np.asarray(clusters)
+    _ids,index=np.unique(clusters,return_inverse=True)
+    diff_sum=np.bincount(index,weights=a.astype(float)-b.astype(float))
+    size=np.bincount(index).astype(float)
+    pick=np.random.default_rng(seed).integers(0,len(size),size=(resamples,len(size)))
+    values=100*diff_sum[pick].sum(axis=1)/size[pick].sum(axis=1)
+    return float(np.percentile(values,2.5)),float(np.percentile(values,97.5))
+
+
+def paired_counts(a_hits,b_hits,clusters=None,interval=False):
+    """Same-query comparison of two hit vectors: concordant and discordant counts plus the exact binomial
+    (McNemar) calculation. With interval=True, adds the difference in percentage points and a seeded
+    photograph-bootstrap 95% interval (clusters = owning photograph of each query; default one per query)."""
+    a=np.asarray(a_hits,dtype=bool);b=np.asarray(b_hits,dtype=bool)
+    if a.shape!=b.shape or a.ndim!=1:raise ValueError("a paired comparison needs one hit per query, same queries")
+    only_a=int(np.sum(a&~b));only_b=int(np.sum(~a&b))
+    out={"queries":int(a.size),"a_r1":float(a.mean()) if a.size else float("nan"),
+         "b_r1":float(b.mean()) if b.size else float("nan"),"both_correct":int(np.sum(a&b)),
+         "only_a":only_a,"only_b":only_b,"neither":int(np.sum(~a&~b)),"gap_queries":only_a-only_b,
+         "exact_mcnemar_p":exact_mcnemar_p(only_a,only_b)}
+    if interval:
+        groups=np.arange(a.size) if clusters is None else np.asarray(clusters)
+        if groups.shape!=a.shape:raise ValueError("one cluster id per query")
+        low,high=photograph_bootstrap_pp(a,b,groups)
+        out.update(difference_pp=100*(out["a_r1"]-out["b_r1"]),ci95_low_pp=low,ci95_high_pp=high,
+                   bootstrap_photographs=int(len(np.unique(groups))))
+    return out
 
 def expected_recall(n,total_positives,k):
     if k>=n:return 1.0
@@ -527,7 +645,7 @@ class BlipWorkshop:
                 values.extend(torch.softmax(logits.float(),dim=-1)[:,1].cpu().tolist())
         return values,time.perf_counter()-t0
 
-def rerank_with_blip(blip,raw_image_embeds,texts,owners,coarse,k):
+def rerank_with_blip(blip,raw_image_embeds,texts,owners,coarse,k,hits=None):
     retrieval_metrics(coarse,owners)
     if coarse.shape[0]<2 or len(raw_image_embeds)!=coarse.shape[0] or len(texts)!=coarse.shape[1] or k<1:
         raise ValueError("Reranking needs aligned inputs, at least two images and positive k")
@@ -550,6 +668,7 @@ def rerank_with_blip(blip,raw_image_embeds,texts,owners,coarse,k):
         if i not in best or p>best[i][0]:
             best[i]=(p,j)
     i2t_r1=float(np.mean([owners[j]==i for i,(_p,j) in best.items()]))
+    itm_i2t_hits=[bool(owners[best[i][1]]==i) for i in range(n_images)]
 
     # Canonical caption -> image (the first caption of every photograph is a query).
     queries=canonical_caption_indices(owners,n_images)
@@ -568,6 +687,7 @@ def rerank_with_blip(blip,raw_image_embeds,texts,owners,coarse,k):
         if j not in best2 or p>best2[j][0]:
             best2[j]=(p,i)
     t2i_r1=float(np.mean([owners[j]==i for j,(_p,i) in best2.items()]))
+    itm_t2i_hits=[bool(owners[j]==best2[j][1]) for j in queries]
 
     # Hard-negative pair accuracy.
     pairs=[]
@@ -585,6 +705,11 @@ def rerank_with_blip(blip,raw_image_embeds,texts,owners,coarse,k):
     # Coarse R@1 on exactly the queries that were reranked, so each delta isolates the reranker.
     coarse_i2t_r1=float(np.mean(coarse_i2t_hits))
     coarse_t2i_r1_canonical=float(np.mean(coarse_t2i_hits))
+    # Same-query paired evidence for each delta: queries the reranker fixed and broke (SVR2-m2).
+    i2t_pair=paired_counts(itm_i2t_hits,coarse_i2t_hits);t2i_pair=paired_counts(itm_t2i_hits,coarse_t2i_hits)
+    if hits is not None:
+        hits.update(coarse_i2t=np.asarray(coarse_i2t_hits,dtype=bool),itm_i2t=np.asarray(itm_i2t_hits,dtype=bool),
+                    coarse_t2i=np.asarray(coarse_t2i_hits,dtype=bool),itm_t2i=np.asarray(itm_t2i_hits,dtype=bool))
     return {
         "rerank_top_k":k,
         "i2t_queries":n_images,
@@ -599,6 +724,12 @@ def rerank_with_blip(blip,raw_image_embeds,texts,owners,coarse,k):
         "pair_evaluations":len(probs)+len(probs2)+len(probs3),
         "seconds":seconds_i2t+seconds_t2i+seconds_pair,
         **candidate_oracle(coarse,owners,k),
+        "i2t_fixed_by_rerank":i2t_pair["only_a"],
+        "i2t_broken_by_rerank":i2t_pair["only_b"],
+        "i2t_rerank_exact_p":i2t_pair["exact_mcnemar_p"],
+        "t2i_fixed_by_rerank":t2i_pair["only_a"],
+        "t2i_broken_by_rerank":t2i_pair["only_b"],
+        "t2i_rerank_exact_p":t2i_pair["exact_mcnemar_p"],
     }
 
 def blip_trainable_names(model,n_layers=2):
@@ -1100,7 +1231,16 @@ def stage_split(args):
     train_records=pool[:208]
     validation_records=pool[208:248]
     core_test=pool[248:318]
-    test_records=core_test+sorted(group1,key=lambda r:r["image_id"])
+    # Gallery-only additions minus the pinned exclusions (TEST_EXCLUSIONS); each excluded id must be present
+    # in row group 1, so the exclusion is explicit and the result deterministic.
+    group1_ids={r["image_id"] for r in group1}
+    missing=sorted(set(TEST_EXCLUSIONS)-group1_ids)
+    if missing:
+        raise RuntimeError(f"pinned test exclusions not found in row group 1: {missing}")
+    test_records=core_test+sorted((r for r in group1 if r["image_id"] not in TEST_EXCLUSIONS),
+                                  key=lambda r:r["image_id"])
+    if {r["image_id"] for r in test_records}&set(TEST_EXCLUSIONS):
+        raise RuntimeError("an excluded photograph is still in the test gallery")
 
     for split,records in [
         ("train",train_records),
@@ -1111,8 +1251,8 @@ def stage_split(args):
             r["id"]=f"{split}-{i:04d}"
             r["split"]=split
 
-    if len(test_records)!=391:
-        raise RuntimeError("test gallery must contain exactly 391 photographs")
+    if len(test_records)!=TEST_IMAGES:
+        raise RuntimeError(f"test gallery must contain exactly {TEST_IMAGES} photographs")
 
     all_seen={}
     for split,records in [("train",train_records),("validation",validation_records),("test",test_records)]:
@@ -1123,8 +1263,8 @@ def stage_split(args):
             all_seen[r["pixel_sha256"]]=split
 
     test_caption_count=sum(len(r["captions"]) for r in test_records)
-    if test_caption_count!=1737:
-        raise RuntimeError(f"expected 1737 test captions, got {test_caption_count}")
+    if test_caption_count!=TEST_CAPTIONS:
+        raise RuntimeError(f"expected {TEST_CAPTIONS} test captions, got {test_caption_count}")
 
     print({
         "train":[len(train_records),sum(len(r["captions"]) for r in train_records)],
@@ -1151,16 +1291,24 @@ def stage_split(args):
             "test_images":len(test_records),
             "test_captions":test_caption_count,
         },
+        "test_exclusions":TEST_EXCLUSIONS,
     }
     dataset_manifest["role_digest"]=hashlib.sha256(
         json.dumps(dataset_manifest["roles"],sort_keys=True,separators=(",",":")).encode()
     ).hexdigest()
 
+    # Near-duplicate audit (SVR2-m5): added after the role digest, so the digest and the split are unchanged.
+    audit=near_duplicate_audit({"train":train_records,"validation":validation_records,"test":test_records})
+    dataset_manifest["near_duplicate_audit"]=audit
+    pd.DataFrame([{"role_pair":k,"pairs_within_threshold":v,"min_hamming":audit["min_hamming"][k]}
+                  for k,v in audit["pair_counts"].items()]).to_csv(OUTPUT_ROOT/"data"/"near_duplicate_audit.csv",index=False)
     (OUTPUT_ROOT/"data"/"dataset_manifest.json").write_text(
         json.dumps(dataset_manifest,indent=2),encoding="utf-8"
     )
     write_state("records.json",{"train":train_records,"validation":validation_records,"test":test_records})
     print("role_digest",dataset_manifest["role_digest"])
+    print("near-duplicate audit (dHash, Hamming <=",audit["threshold_hamming"],"):",audit["pair_counts"],
+          "| cross-role pairs:",audit["cross_role_pairs"])
 
 
 @stage("models")
@@ -1287,7 +1435,7 @@ def stage_freeze(args):
     if WORKSHOP_TIER=="FULL" and blip_artifact_manifest is None:
         raise RuntimeError("FULL: the BLIP adapter of this Run all is missing; run the adaptation cell first.")
     frozen={
-        "notebook_spec":"2.1",
+        "notebook_spec":"2.5",
         "profile":"MULTI-CAPABILITY",
         "mode":"WORKSHOP",
         "tier":WORKSHOP_TIER,
@@ -1307,6 +1455,13 @@ def stage_freeze(args):
                 "id":BLIP["model_id"],"revision":BLIP["revision"],
                 "weight_sha256":"017fb3e7f4e125f13a8a4717f1402dbe0d0bb877474b4a203db13a4447b0227f",
                 "embedding_dim":256,
+            },
+            "blip_flickr_sensitivity":{
+                "id":BLIP_FLICKR["model_id"],"revision":BLIP_FLICKR["revision"],
+                "license":BLIP_FLICKR["license"],
+                "weight_sha256":"8d5e0fa9646853f11ba81db09b89f2265ed60ff1d7e69e594f46e103db391488",
+                "embedding_dim":256,
+                "role":"sensitivity row only (frozen ITC retrieval); not part of the principal table",
             },
         },
         "evaluation":{
@@ -1394,6 +1549,41 @@ def stage_retrieval_table(args):
     show(retrieval_table)
 
 
+@stage("flickr-sensitivity")
+def stage_flickr_sensitivity(args):
+    """SVR2-M1 sensitivity row: BLIP ITM Base fine-tuned for retrieval on Flickr30k (same architecture,
+    tokenizer and 384x384 input as the COCO checkpoint), scored as a frozen ITC retriever on the same test gallery and queries. It adds a
+    row and a CSV; no earlier table, index, figure or summary value changes."""
+    global hf_hub_download
+    require_frozen()
+    from huggingface_hub import hf_hub_download
+    load_transformers()
+    root=stage_snapshot(BLIP_FLICKR,model_root("blip_flickr"))
+    test_records=records()["test"]
+    test_texts,test_owners=gallery(test_records)
+    blip=None;raw=None
+    try:
+        # Same loader and weights_only path as the COCO BLIP; a separate process from every other model.
+        blip=BlipWorkshop(root=root)
+        raw,image_seconds=blip.raw_image_embeds(test_records)
+        img=blip.image_features(raw)
+        txt,text_seconds=blip.text_features(test_texts)
+    finally:
+        blip=None;raw=None;gc.collect()
+        if torch is not None and torch.cuda.is_available():torch.cuda.empty_cache()
+    scores=img@txt.T
+    metrics=retrieval_metrics(scores,test_owners)
+    save_scores("test_blip_itc_flickr",scores)
+    write_state("test_blip_itc_flickr.json",{
+        "metrics":metrics,
+        "timing":{"image_embedding_seconds":image_seconds,"text_embedding_seconds":text_seconds},
+        "model":{"id":BLIP_FLICKR["model_id"],"revision":BLIP_FLICKR["revision"],"license":BLIP_FLICKR["license"]},
+    })
+    row={"model":"blip_itc_flickr (sensitivity)","dim":256,**metrics}
+    pd.DataFrame([row]).to_csv(OUTPUT_ROOT/"test"/"blip_flickr_sensitivity.csv",index=False)
+    show(pd.DataFrame([row]))
+
+
 RERANK_VIEW=[
     "candidate_source","coarse_i2t_r1","itm_i2t_recall_at_1","delta_i2t_r1",
     "coarse_t2i_r1_canonical","itm_t2i_recall_at_1","delta_t2i_r1",
@@ -1409,28 +1599,86 @@ def stage_rerank(args):
     test_texts,test_owners=gallery(test_records)
     blip_frozen=BlipWorkshop()
     blip_raw,_seconds=blip_frozen.raw_image_embeds(test_records)
-    rerank_rows=[]
+    rerank_rows=[];rerank_hits={}
     for name,key in [
         ("siglip_v1","siglip1"),
         ("siglip2","siglip2"),
         ("blip_itc","blip_itc"),
     ]:
         scores=load_scores(f"test_{key}")
+        hits={}
         result=rerank_with_blip(
-            blip_frozen,blip_raw,test_texts,test_owners,scores,RERANK_TOP_K
+            blip_frozen,blip_raw,test_texts,test_owners,scores,RERANK_TOP_K,hits=hits
         )
+        rerank_hits.update({f"{name}_{view}":values for view,values in hits.items()})
         coarse=retrieval_metrics(scores,test_owners)
         rerank_rows.append({
             "candidate_source":name,
             **result,
-            # All 1,737 caption queries (the section 17 value); not the baseline for itm_t2i_recall_at_1.
+            # All caption queries (the section 17 value); not the baseline for itm_t2i_recall_at_1.
             "coarse_t2i_r1_all_captions":coarse["t2i_recall_at_1"],
         })
 
     rerank_table=pd.DataFrame(rerank_rows)
     rerank_table.to_csv(OUTPUT_ROOT/"test"/"reranking_metrics.csv",index=False)
     write_state("rerank_rows.json",rerank_rows)
+    np.savez(state_path("rerank_hits.npz"),**rerank_hits)
     show(rerank_table[RERANK_VIEW].round(4))
+
+
+PAIRED_MODELS=[("siglip2","siglip_v1"),("siglip2","blip_itc"),("siglip_v1","blip_itc")]
+
+
+def this_run_file(path):
+    path=Path(path)
+    return path if path.is_file() and path.stat().st_mtime>=RUN_STARTED-1.0 else None
+
+
+@stage("paired-evidence")
+def stage_paired_evidence(args):
+    """SVR2-m2, display-only: same-query discordant counts and an exact McNemar test for every model gap
+    and every reranking delta at R@1. Recomputes nothing that earlier tables report."""
+    test_records=records()["test"]
+    _texts,test_owners=gallery(test_records)
+    canonical=canonical_caption_indices(test_owners,len(test_records))
+    grids={"siglip2":load_scores("test_siglip2"),"siglip_v1":load_scores("test_siglip1"),
+           "blip_itc":load_scores("test_blip_itc")}
+    pairs=list(PAIRED_MODELS)
+    if this_run_file(WORK_ROOT/"state"/"test_blip_itc_flickr_scores.npy"):
+        grids["blip_itc_flickr"]=load_scores("test_blip_itc_flickr")
+        pairs.append(("blip_itc_flickr","blip_itc"))
+    top1={name:full_gallery_top1_hits(grid,test_owners) for name,grid in grids.items()}
+    rows=[]
+    for a,b in pairs:
+        for measure in [
+            ("coarse I2T R@1 (every photograph)",lambda h:h[0],None,"photograph"),
+            ("coarse T2I R@1 (all captions)",lambda h:h[1],test_owners,"caption, clustered by photograph"),
+            ("coarse T2I R@1 (first caption per photograph)",lambda h:h[1][canonical],None,"photograph"),
+        ]:
+            rows.append({"comparison":f"{a} vs {b}","measure":measure[0],"query_unit":measure[3],
+                         **paired_counts(measure[1](top1[a]),measure[1](top1[b]),clusters=measure[2],interval=True)})
+    hits_path=this_run_file(state_path("rerank_hits.npz"))
+    if hits_path:
+        reranked=np.load(hits_path,allow_pickle=False)
+        for a,b in PAIRED_MODELS:
+            for view,label in [("itm_i2t","reranked I2T R@1 (every photograph)"),
+                               ("itm_t2i","reranked T2I R@1 (first caption per photograph)")]:
+                rows.append({"comparison":f"{a} vs {b} candidates, same ITM reranker","measure":label,
+                             "query_unit":"photograph",
+                             **paired_counts(reranked[f"{a}_{view}"],reranked[f"{b}_{view}"],interval=True)})
+        for source in ("siglip_v1","siglip2","blip_itc"):
+            for direction in ("i2t","t2i"):
+                rows.append({"comparison":f"ITM rerank vs coarse ({source} candidates)",
+                             "measure":f"{direction.upper()} R@1, same queries (only_a = fixed, only_b = broken)",
+                             "query_unit":"photograph",
+                             **paired_counts(reranked[f"{source}_itm_{direction}"],
+                                             reranked[f"{source}_coarse_{direction}"],interval=True)})
+    table=pd.DataFrame(rows)
+    table.to_csv(OUTPUT_ROOT/"test"/"paired_comparisons.csv",index=False)
+    print(f"{len(table)} exploratory paired comparisons. difference_pp and its photograph-bootstrap interval "
+          f"({BOOTSTRAP_RESAMPLES} resamples, seed {BOOTSTRAP_SEED}) describe this gallery; exact_mcnemar_p is the "
+          "exact binomial calculation, assumes independent queries and is unadjusted for multiple comparisons.")
+    show(table)
 
 
 @stage("adapted-test")
@@ -1495,6 +1743,32 @@ def stage_gallery_size(args):
     gallery_table.to_csv(OUTPUT_ROOT/"test"/"gallery_size_metrics.csv",index=False)
     write_state("gallery_rows.json",gallery_rows)
     show(gallery_table)
+
+
+CORE_TEST_IMAGES=70
+
+
+@stage("gallery-size-fixed-queries")
+def stage_gallery_size_fixed_queries(args):
+    """Display-only companion to the nested gallery-size table: the queries stay the 70 core test photographs
+    and their captions at every size, and only the candidate gallery grows (nested prefixes)."""
+    test_records=records()["test"]
+    _texts,owners=gallery(test_records)
+    owners=np.asarray(owners,dtype=int)
+    core_caps=int(np.sum(owners<CORE_TEST_IMAGES))
+    rows=[]
+    for n in GALLERY_SIZES:
+        n_caps=int(np.sum(owners<n))
+        for name,scores in test_score_grids():
+            sub=np.asarray(scores,dtype=np.float64)[:n,:n_caps]
+            i2t=[owners[int(np.argsort(-sub[i],kind="stable")[0])]==i for i in range(CORE_TEST_IMAGES)]
+            t2i=[int(np.argsort(-sub[:,j],kind="stable")[0])==owners[j] for j in range(core_caps)]
+            rows.append({"gallery_images":n,"candidate_captions":n_caps,"query_photographs":CORE_TEST_IMAGES,
+                         "query_captions":core_caps,"model":name,"chance_t2i_r1":1/n,
+                         "i2t_r1":float(np.mean(i2t)),"t2i_r1":float(np.mean(t2i))})
+    table=pd.DataFrame(rows)
+    table.to_csv(OUTPUT_ROOT/"test"/"gallery_size_fixed_queries.csv",index=False)
+    show(table)
 
 
 def category_tables(test_records,test_owners,test_texts,train_records,grids):
@@ -1599,14 +1873,18 @@ def stage_disagreement_figures(args):
     test_records=records()["test"]
     test_texts,test_owners=gallery(test_records)
     hard_tables,rank_compare=hard_negative_tables(test_records,test_texts,test_owners,test_score_grids())
+    # One selected extreme per comparison (the largest rank difference), not a typical case (SVR2-m2).
     chosen=[
-        ("SigLIP2 advantage over v1",int(rank_compare.loc[rank_compare["siglip2_vs_v1"].idxmax(),"image_index"])),
-        ("SigLIP v1 advantage over SigLIP2",int(rank_compare.loc[rank_compare["siglip2_vs_v1"].idxmin(),"image_index"])),
-        ("SigLIP2 advantage over BLIP ITC",int(rank_compare.loc[rank_compare["siglip2_vs_blip"].idxmax(),"image_index"])),
+        ("Selected extreme: largest SigLIP2 rank gain over SigLIP v1","extreme_siglip2_over_v1",
+         int(rank_compare.loc[rank_compare["siglip2_vs_v1"].idxmax(),"image_index"])),
+        ("Selected extreme: largest SigLIP v1 rank gain over SigLIP2","extreme_v1_over_siglip2",
+         int(rank_compare.loc[rank_compare["siglip2_vs_v1"].idxmin(),"image_index"])),
+        ("Selected extreme: largest SigLIP2 rank gain over BLIP ITC","extreme_siglip2_over_blip_itc",
+         int(rank_compare.loc[rank_compare["siglip2_vs_blip"].idxmax(),"image_index"])),
     ]
 
     written=[]
-    for title,i in chosen:
+    for title,safe,i in chosen:
         r=test_records[i]
         with Image.open(r["path"]) as im:
             fig,ax=plt.subplots(figsize=(7,5))
@@ -1621,7 +1899,6 @@ def stage_disagreement_figures(args):
             )
             fig.text(0.02,0.01,text,fontsize=8,va="bottom")
             plt.tight_layout(rect=[0,0.17,1,1])
-            safe=title.lower().replace(" ","_")
             plt.savefig(OUTPUT_ROOT/"figures"/f"{safe}.png",dpi=150,bbox_inches="tight")
             plt.close(fig)
         written.append({"title":title,"image_index":i,"path":str(OUTPUT_ROOT/"figures"/f"{safe}.png")})
@@ -1663,7 +1940,7 @@ def stage_runtime_storage(args):
     write_state("storage_rows.json",storage_rows)
     show(storage_table)
 
-    # Dense similarity search cost for one text query across the 391 image vectors.
+    # Dense similarity search cost for one text query across the test image vectors.
     search=[]
     for name,(img,txt) in [
         ("siglip_v1",load_index("siglip1")),
@@ -1793,12 +2070,24 @@ def caption_perturbation(validation_records,validation_texts,validation_owners,s
     return perturbation_table
 
 
+BYOD_REFUSED=3  # exit code of a refused archive: the notebook prints the refusal once and does not raise
+
+
 @stage("byod")
 def stage_byod(args):
-    if not BYOD_ZIP_PATH or not Path(BYOD_ZIP_PATH).is_file():
-        raise ValueError(f"BYOD_ZIP_PATH {BYOD_ZIP_PATH!r} is not a file in this runtime; check the path with the Files pane")
+    # A refusal after an earlier accepted archive must not leave that archive's result in this run's report.
+    earlier=WORK_ROOT/"state"/"byod_run.json"
+    if earlier.is_file():earlier.unlink()
+    try:
+        if not BYOD_ZIP_PATH or not Path(BYOD_ZIP_PATH).is_file():
+            raise ValueError(f"BYOD_ZIP_PATH {BYOD_ZIP_PATH!r} is not a file in this runtime; check the path with the Files pane")
+        byod_roles=load_byod(BYOD_ZIP_PATH)
+    except (ValueError,zipfile.BadZipFile) as exc:
+        print(f"BYOD archive refused: {exc}")
+        print("Nothing from this archive was used and no model was loaded. Fix the archive (section 26 lists "
+              "the rules), upload it again, set BYOD_ZIP_PATH, then re-run the controls cell and this cell.")
+        return BYOD_REFUSED
     load_transformers()
-    byod_roles=load_byod(BYOD_ZIP_PATH)
     print("BYOD roles:",{role:len(rows) for role,rows in byod_roles.items()},"| tier:",WORKSHOP_TIER)
     byod_run_dir=run_byod_retrieval(byod_roles)
     write_state("byod_run.json",{"run_dir":str(byod_run_dir),
@@ -1816,11 +2105,12 @@ def byod_run_dir_of_this_run():
 def completion_summary(tier,test_records,test_texts,retrieval_rows,rerank_rows,blip_adapter_report,
                        blip_reload_parity,byod_run_dir):
     return {
-        "notebook_spec":"2.1",
+        "notebook_spec":"2.5",
         "profile":"MULTI-CAPABILITY",
         "mode":"WORKSHOP",
         "tier":tier,
         "models":["SigLIP v1","SigLIP 2","BLIP ITC/ITM"],
+        "comparison_scope":"whole checkpoints (training regime, input resolution, text tower and size differ)",
         "test_gallery_images":len(test_records),
         "test_gallery_captions":len(test_texts),
         "rerank_top_k":RERANK_TOP_K,
@@ -1865,10 +2155,10 @@ def stage_report(args):
     byod_run_dir=byod_run_dir_of_this_run()
 
     experiment_manifest={
-        "notebook_spec":"2.1",
+        "notebook_spec":"2.5",
         "notebook_profile":"MULTI-CAPABILITY",
         "notebook_mode":"WORKSHOP",
-        "workshop_revision":"0.3.0-candidate",
+        "workshop_revision":"0.4.0-candidate",
         "timestamp_utc":datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "tier":WORKSHOP_TIER,
         "dataset":dataset_manifest,
@@ -1878,20 +2168,24 @@ def stage_report(args):
         "reranking_test":rerank_table.to_dict("records"),
         "gallery_size":gallery_table.to_dict("records"),
         "runtime_storage":storage_table.to_dict("records"),
+        "blip_flickr_sensitivity":(read_state("test_blip_itc_flickr.json")
+                                   if this_run_file(WORK_ROOT/"state"/"test_blip_itc_flickr.json") else None),
         "blip_adaptation":blip_adapter_report,
         "adapted_blip_test":adapted_blip_metrics,
         "adapted_reranking":adapted_rerank_rows,
         "blip_reload":blip_reload_parity,
         "index_manifest":index_manifest,
         "environment":read_state("environment.json"),
-        "evidence_scope":"one seeded VizWiz-Captions sample; 391-image / 1,737-caption held-out gallery",
+        "evidence_scope":"one seeded VizWiz-Captions sample; 389-image / 1,729-caption gallery (2 near-duplicate photographs excluded) held out from this notebook's train and validation roles; pretraining overlap with SigLIP, SigLIP 2 or BLIP data cannot be ruled out; near-duplicate photographs audited by 64-bit dHash (see dataset.near_duplicate_audit)",
         "byod_run_directory":str(byod_run_dir) if byod_run_dir else None,
         "bundle_policy":"files under OUTPUT_DIR written since this Run all started (RUN_STARTED)",
         "release_gates":[
-            "fresh T4 STANDARD Run all",
+            "fresh T4 STANDARD Run all of this notebook blob",
             "fresh T4 FULL Run all",
+            "browser BYOD run with one valid and one refused archive (REL12)",
             "record peak VRAM and exact released-notebook wall times",
         ],
+        "run_evidence_policy":"each notebook blob needs its own recorded hosted run; see docs/release-verification.md",
     }
 
     (OUTPUT_ROOT/"provenance"/"experiment_manifest.json").write_text(
@@ -1944,8 +2238,7 @@ def main(argv=None):
         WORK_ROOT / "state",
     ]:
         p.mkdir(parents=True, exist_ok=True)
-    STAGES[args.stage](args)
-    return 0
+    return STAGES[args.stage](args) or 0
 
 
 if __name__=="__main__":

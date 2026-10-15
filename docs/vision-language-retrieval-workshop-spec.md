@@ -565,6 +565,8 @@ Reuse the existing BLIP retrieval split.
 
 The additional 321 gallery photographs increase retrieval difficulty without entering training or validation.
 
+> **Update (revision 0.4.0-candidate, 2026-10-15):** two row-group-1 photographs (30231, 30181) are excluded as near-duplicates of a train and a validation photograph (`TEST_EXCLUSIONS` in `tools/retrieval_workshop.py`), so the implemented test gallery is 389 photographs / 1,729 captions. The 391 / 1,737 figures in this design document describe the original plan.
+
 ---
 
 # 20. Why the large test gallery matters

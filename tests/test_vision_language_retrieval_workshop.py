@@ -50,14 +50,15 @@ def notebook_constants() -> dict:
 
 def test_metadata() -> None:
     meta = load()["metadata"]["dimer"]
-    assert meta["notebook_spec"] == "2.1"
+    assert meta["notebook_spec"] == "2.5"
+    assert meta["notebook_kind"] == "WORKSHOP"
     assert meta["notebook_profile"] == "MULTI-CAPABILITY"
     assert meta["notebook_mode"] == "WORKSHOP"
     assert meta["standalone"] is True
     assert meta["worker_required"] is False
     assert meta["credentials_required"] is False
     assert meta["default_tier"] == "STANDARD"
-    assert meta["clean_runtime_evidence"] == "pending"
+    assert "0.4.0-candidate: pending" in meta["clean_runtime_evidence"]
 
 
 def test_code_cells_compile() -> None:

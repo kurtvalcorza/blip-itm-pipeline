@@ -740,8 +740,21 @@ def validate_notebooks() -> None:
     )
 
     # The generated BLIP tutorial remains the repository's primary release asset and keeps
-    # the full Notebook Spec 2.2 parity/identity validation below. The supplemental 2.1
+    # the full Notebook Spec 2.2 parity/identity validation below. The supplemental 2.5
     # workshop has its own static contract tests in tests/test_vision_language_retrieval_workshop.py.
+    shared = json.loads(_read(tutorials / WORKSHOP_NOTEBOOK_NAME))
+    meta = shared.get("metadata", {}).get("dimer", {})
+
+    # SVR2-m3: the shared workshop declares NOTEBOOK_SPEC 2.5, its kind, and the DOC17 use notice
+    # before the first code cell.
+    _check(meta.get("notebook_spec") == "2.5", "Shared retrieval must declare NOTEBOOK_SPEC 2.5")
+    _check(meta.get("notebook_kind") == "WORKSHOP",
+           "Shared retrieval must declare notebook_kind WORKSHOP")
+    _first_code = next(i for i, c in enumerate(shared["cells"]) if c.get("cell_type") == "code")
+    _check(any(c.get("cell_type") == "markdown"
+               and "".join(c.get("source", [])).startswith("> **⚠️ Notice.**")
+               for c in shared["cells"][:_first_code]),
+           "Shared retrieval needs the DOC17 use notice before its first code cell")
     path = tutorials / NOTEBOOK_NAME
     build = _load_tool("build_notebook")
     notebook = json.loads(_read(path))
@@ -762,7 +775,7 @@ def validate_notebooks() -> None:
         f"DIMER Notebook Specification {NOTEBOOK_SPEC}" in registry,
         "tutorials/README.md must name the primary notebook spec version",
     )
-    _check("NOTEBOOK_SPEC 2.1" in registry, "tutorials/README.md must record the supplemental workshop spec version")
+    _check("NOTEBOOK_SPEC 2.5" in registry, "tutorials/README.md must record the supplemental workshop spec version")
     _check("standalone" in registry.lower(), "tutorials/README.md must record that the notebooks are standalone")
 
 def validate_all() -> list[str]:
