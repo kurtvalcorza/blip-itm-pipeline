@@ -407,5 +407,20 @@
    "visual_verdict": "different photographs (featureless/blurred or same object category)"
   }
  ],
- "split_changed": false
+ "split_changed": "test only: 2 photographs (8 captions) excluded",
+ "decision": {
+  "date": "2026-10-15",
+  "by": "Kurt (owner)",
+  "action": "drop the 2 test photographs and their captions",
+  "excluded_test_ids": [
+   "30231",
+   "30181"
+  ],
+  "pinned_in": "tools/retrieval_workshop.py TEST_EXCLUSIONS",
+  "test_gallery_after": {
+   "photographs": 389,
+   "captions": 1729
+  },
+  "train_validation": "unchanged (208 / 888 and 40 / 179)"
+ }
 }

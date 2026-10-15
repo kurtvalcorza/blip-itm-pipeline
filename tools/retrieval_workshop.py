@@ -38,7 +38,7 @@ STAGE_FORMAT = "dimer.retrieval-workshop.stages.v1"
 WORKSHOP_TIER = "STANDARD"
 RERANK_TOP_K = 5
 RECALL_KS = (1, 5, 10)
-GALLERY_SIZES = (70, 128, 256, 391)
+GALLERY_SIZES = (70, 128, 256, 389)
 BLIP_EPOCHS = 4
 BLIP_LEARNING_RATE = 2e-5
 BLIP_BATCH_SIZE = 16
@@ -138,6 +138,19 @@ CORPUS_BYTES=392_245_504
 CORPUS_SHA256="4492465a41d32b3c12b8b7b6a0cf7e0a0e202a5b825b006ca0c85dcdf24efd3e"
 
 ITC_TEMPERATURE=0.07
+
+# Pinned test exclusions (owner decision 2026-10-15). Each photograph is a near-duplicate of a photograph in
+# another role, found by the 2026-10-15 near-duplicate review (SigLIP 2 image-embedding cosine, SSIM and visual
+# check; record docs/reviews/2026-10-15-near-duplicate-review/near_duplicate_review.json). Both come from row
+# group 1 (test-only gallery additions), so train and validation are unchanged. Their captions leave with them.
+TEST_EXCLUSIONS={
+    "30231":{"duplicates":"train 29698","reason":"same TV remote on the same table, different crop",
+             "audit":"near_duplicate_review.json 2026-10-15 (cosine 0.963, SSIM 0.67)"},
+    "30181":{"duplicates":"validation 29906","reason":"same fireplace scene photographed twice",
+             "audit":"near_duplicate_review.json 2026-10-15 (cosine 0.972, SSIM 0.51)"},
+}
+TEST_IMAGES=389
+TEST_CAPTIONS=1729
 
 
 def configure(config):
@@ -1218,7 +1231,16 @@ def stage_split(args):
     train_records=pool[:208]
     validation_records=pool[208:248]
     core_test=pool[248:318]
-    test_records=core_test+sorted(group1,key=lambda r:r["image_id"])
+    # Gallery-only additions minus the pinned exclusions (TEST_EXCLUSIONS); each excluded id must be present
+    # in row group 1, so the exclusion is explicit and the result deterministic.
+    group1_ids={r["image_id"] for r in group1}
+    missing=sorted(set(TEST_EXCLUSIONS)-group1_ids)
+    if missing:
+        raise RuntimeError(f"pinned test exclusions not found in row group 1: {missing}")
+    test_records=core_test+sorted((r for r in group1 if r["image_id"] not in TEST_EXCLUSIONS),
+                                  key=lambda r:r["image_id"])
+    if {r["image_id"] for r in test_records}&set(TEST_EXCLUSIONS):
+        raise RuntimeError("an excluded photograph is still in the test gallery")
 
     for split,records in [
         ("train",train_records),
@@ -1229,8 +1251,8 @@ def stage_split(args):
             r["id"]=f"{split}-{i:04d}"
             r["split"]=split
 
-    if len(test_records)!=391:
-        raise RuntimeError("test gallery must contain exactly 391 photographs")
+    if len(test_records)!=TEST_IMAGES:
+        raise RuntimeError(f"test gallery must contain exactly {TEST_IMAGES} photographs")
 
     all_seen={}
     for split,records in [("train",train_records),("validation",validation_records),("test",test_records)]:
@@ -1241,8 +1263,8 @@ def stage_split(args):
             all_seen[r["pixel_sha256"]]=split
 
     test_caption_count=sum(len(r["captions"]) for r in test_records)
-    if test_caption_count!=1737:
-        raise RuntimeError(f"expected 1737 test captions, got {test_caption_count}")
+    if test_caption_count!=TEST_CAPTIONS:
+        raise RuntimeError(f"expected {TEST_CAPTIONS} test captions, got {test_caption_count}")
 
     print({
         "train":[len(train_records),sum(len(r["captions"]) for r in train_records)],
@@ -1269,6 +1291,7 @@ def stage_split(args):
             "test_images":len(test_records),
             "test_captions":test_caption_count,
         },
+        "test_exclusions":TEST_EXCLUSIONS,
     }
     dataset_manifest["role_digest"]=hashlib.sha256(
         json.dumps(dataset_manifest["roles"],sort_keys=True,separators=(",",":")).encode()
@@ -1592,7 +1615,7 @@ def stage_rerank(args):
         rerank_rows.append({
             "candidate_source":name,
             **result,
-            # All 1,737 caption queries (the section 17 value); not the baseline for itm_t2i_recall_at_1.
+            # All caption queries (the section 17 value); not the baseline for itm_t2i_recall_at_1.
             "coarse_t2i_r1_all_captions":coarse["t2i_recall_at_1"],
         })
 
@@ -1917,7 +1940,7 @@ def stage_runtime_storage(args):
     write_state("storage_rows.json",storage_rows)
     show(storage_table)
 
-    # Dense similarity search cost for one text query across the 391 image vectors.
+    # Dense similarity search cost for one text query across the test image vectors.
     search=[]
     for name,(img,txt) in [
         ("siglip_v1",load_index("siglip1")),
@@ -2153,7 +2176,7 @@ def stage_report(args):
         "blip_reload":blip_reload_parity,
         "index_manifest":index_manifest,
         "environment":read_state("environment.json"),
-        "evidence_scope":"one seeded VizWiz-Captions sample; 391-image / 1,737-caption gallery held out from this notebook's train and validation roles; pretraining overlap with SigLIP, SigLIP 2 or BLIP data cannot be ruled out; near-duplicate photographs audited by 64-bit dHash (see dataset.near_duplicate_audit)",
+        "evidence_scope":"one seeded VizWiz-Captions sample; 389-image / 1,729-caption gallery (2 near-duplicate photographs excluded) held out from this notebook's train and validation roles; pretraining overlap with SigLIP, SigLIP 2 or BLIP data cannot be ruled out; near-duplicate photographs audited by 64-bit dHash (see dataset.near_duplicate_audit)",
         "byod_run_directory":str(byod_run_dir) if byod_run_dir else None,
         "bundle_policy":"files under OUTPUT_DIR written since this Run all started (RUN_STARTED)",
         "release_gates":[

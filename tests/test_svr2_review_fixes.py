@@ -297,7 +297,7 @@ def test_release_gates_and_evidence_scope(tmp_path):
 def test_near_duplicates_and_annotated_owner_relevance_are_stated():
     s4 = src("472e7ac5")
     assert "Near-duplicate audit" in s4 and "not measured" not in s4 and "affects only" not in s4
-    assert "primarily threaten the `FULL` adaptation result" in s4 and "The split is unchanged" in s4
+    assert "primarily threaten the `FULL` adaptation result" in s4 and "Train and validation are unchanged" in s4
     assert "near-duplicate audit" in src("1bef037d")
     s5 = src("71516f81")
     assert "T2I uses one annotated positive image per caption; I2T uses all captions attached to that image." in s5
@@ -383,11 +383,69 @@ def test_gallery_size_text_no_longer_claims_a_single_factor():
 
 def test_stronger_near_duplicate_review_is_recorded():
     review = NB["metadata"]["dimer"]["near_duplicate_review"]
-    assert review["split_changed"] is False and "SigLIP 2" in review["stronger_method"]
+    assert review["split_changed"].startswith("test only") and "SigLIP 2" in review["stronger_method"]
     assert review["near_duplicates"]["train-test"] == ["29698/30231"]
     assert review["near_duplicates"]["validation-test"] == ["29906/30181"]
     record = NOTEBOOK_ROOT / review["record"]
     data = json.loads(record.read_text(encoding="utf-8"))
-    assert data["split_changed"] is False and data["screen"]["cross_role_pairs"] == 58
+    assert data["split_changed"].startswith("test only") and data["screen"]["cross_role_pairs"] == 58
+    assert data["decision"]["excluded_test_ids"] == ["30231", "30181"]
     s4 = src("472e7ac5")
     assert "none of the 58 cross-role dHash pairs is a duplicate" in s4 and "`29906` / test `30181`" in s4
+
+
+# ---- Owner decision 2026-10-15: drop the 2 near-duplicate test photographs ------------------------------
+
+
+def _group(prefix, ids):
+    return [{"image_id": i, "captions": [f"{i} a", f"{i} b", f"{i} c"], "pixel_sha256": f"px{i}",
+             "path": "unused"} for i in ids]
+
+
+def test_test_exclusions_are_pinned_and_enforced(tmp_path):
+    ns = load_stages(tmp_path)
+    excl = ns["TEST_EXCLUSIONS"]
+    assert set(excl) == {"30231", "30181"}
+    assert excl["30231"]["duplicates"] == "train 29698" and excl["30181"]["duplicates"] == "validation 29906"
+    assert all("near_duplicate_review.json" in v["audit"] and v["reason"] for v in excl.values())
+    assert (ns["TEST_IMAGES"], ns["TEST_CAPTIONS"]) == (389, 1729)
+    assert ns["GALLERY_SIZES"][-1] == 389 and "GALLERY_SIZES = (70, 128, 256, 389)" in src("451c607f")
+
+
+def test_split_drops_the_excluded_photographs_and_refuses_if_missing(tmp_path, monkeypatch):
+    ns = load_stages(tmp_path)
+    group0 = _group("g0", [f"{20000 + i}" for i in range(318)])
+    ids1 = [f"{40000 + i}" for i in range(319)] + ["30231", "30181"]
+    group1 = _group("g1", ids1)
+    ns["write_state"]("corpus.json", {"path": str(tmp_path / "shard.parquet")})
+    calls = iter([group0, group1])
+    ns["read_group"] = lambda g: next(calls)
+    ns["near_duplicate_audit"] = lambda roles: {"pair_counts": {}, "min_hamming": {}, "cross_role_pairs": 0,
+                                                "threshold_hamming": 10}
+    ns["TEST_CAPTIONS"] = 389 * 3  # synthetic captions: 3 per photograph
+    import sys as _sys
+
+    pq = types.ModuleType("pyarrow.parquet")
+    pq.ParquetFile = lambda path: None
+    monkeypatch.setitem(_sys.modules, "pyarrow", types.ModuleType("pyarrow"))
+    monkeypatch.setitem(_sys.modules, "pyarrow.parquet", pq)
+    ns["STAGES"]["split"](types.SimpleNamespace(model=None, k=5))
+    data = ns["read_state"]("records.json")
+    test_ids = {r["image_id"] for r in data["test"]}
+    assert len(data["test"]) == 389 and not test_ids & {"30231", "30181"}
+    assert len(data["train"]) == 208 and len(data["validation"]) == 40
+    manifest = json.loads((tmp_path / "out" / "data" / "dataset_manifest.json").read_text())
+    assert set(manifest["test_exclusions"]) == {"30231", "30181"}
+    # A pinned id that is not in row group 1 stops the stage instead of silently changing the gallery.
+    calls = iter([group0, _group("g1", [f"{40000 + i}" for i in range(320)] + ["30231"])])
+    ns["read_group"] = lambda g: next(calls)
+    with pytest.raises(RuntimeError, match="pinned test exclusions not found"):
+        ns["STAGES"]["split"](types.SimpleNamespace(model=None, k=5))
+
+
+def test_markdown_states_the_new_gallery_and_labels_earlier_results():
+    s4 = src("472e7ac5")
+    assert "389 photographs / 1,729 captions" in s4 and "test `30231`" in s4 and "test `30181`" in s4
+    assert "not comparable" in s4 and "TEST_EXCLUSIONS" in s4
+    for cid in ("d9c41fde", "e34f5c03", "svr2-flickr-md", "50c96d8f", "5333fe70", "a52dedc6", "63ebfe7c"):
+        assert "391" not in src(cid), cid

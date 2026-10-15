@@ -84,7 +84,7 @@ def test_test_reranking_table_uses_same_query_columns(tmp_path):
     for column in ("coarse_t2i_r1_canonical", "delta_t2i_r1", "delta_i2t_r1", "itm_pair_accuracy"):
         assert column in cell
     note = src("50c96d8f")
-    assert "first caption" in note and "1,737" in note and "Chance is 0.5" in note
+    assert "first caption" in note and "1,729" in note and "Chance is 0.5" in note
 
 
 def test_rerank_stage_and_cell_report_same_query_deltas(tmp_path):
