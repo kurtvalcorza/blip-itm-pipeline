@@ -175,7 +175,7 @@ def test_flickr_stage_adds_a_row_and_changes_nothing_else(tmp_path):
     loaded = []
 
     class Blip:
-        def __init__(self, root=None, device=None):
+        def __init__(self, root=None, device=None, spec=None):
             loaded.append(root)
 
         def raw_image_embeds(self, recs):

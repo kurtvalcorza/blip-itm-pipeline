@@ -2,7 +2,7 @@
 
 DIMER inference and fine-tuning wrapper for **BLIP fine-tuned for image-text retrieval on COCO** (`Salesforce/blip-itm-base-coco`), Salesforce's 224M-parameter vision-language model (ViT-B/16 image encoder at 384×384, a BERT-style text encoder and an image-grounded text encoder) that scores how well a caption matches an image two ways — the ITC cosine similarity of the projected embeddings and the ITM head's match probability over the fused pair — pinned to an immutable Hugging Face revision and loaded only from a digest-verified local snapshot. The pipeline accepts a grid of 1–16 images and 1–16 captions, scores every pair, ranks the captions per image and ships `recall_at_1` for callers who know the correspondence; it attaches no calibration and never abstains. It also carries a bounded adaptation contract: `adapt` fine-tunes the text encoder's last blocks, the ITC projections and the ITM head with BLIP's contrastive + matching objectives on a validated `{id, image, captions}` dataset, `evaluate` scores retrieval over a held-out gallery (recall@1/5/10 both ways, median rank, rsum, ITM re-ranking, ITM pair accuracy) beside two non-neural baselines, and `save_artifact` / `from_artifact` export and reload the trained tensors as a safetensors adapter bound to the pinned base.
 
-**Weight format.** Upstream hosts no SafeTensors at the pinned revision. This package executes the digest-pinned `pytorch_model.bin` (a pickle, deserialised with `weights_only=True` only after its SHA-256 matched the manifest); the `tf_model.h5` upstream also hosts is the DIMER upload artifact (DIMER does not accept `.bin`) and is never loaded here. Both digests are recorded in `docs/WEIGHTS.md` and `MODEL_CARD.md`.
+**Weight format.** Upstream hosts no SafeTensors at the pinned revision. This package reads the digest-pinned `pytorch_model.bin` (a pickle) once, with `weights_only=True` and only after its SHA-256 matched the manifest, to write the safetensors conversion `model.converted.safetensors` (SHA-256 `44387f268052…`, pinned), and serves the model only from that file; the `tf_model.h5` upstream also hosts is the DIMER upload artifact (DIMER does not accept `.bin`) and is never loaded here. Both digests are recorded in `docs/WEIGHTS.md` and `MODEL_CARD.md`.
 
 ## Upstream alignment
 
@@ -50,7 +50,8 @@ weights/blip-itm-base-coco/
   config.json                # BlipForImageTextRetrieval: ViT-B/16 @ 384 + 12-layer text encoder, 256-d ITC projection
   preprocessor_config.json   # BlipImageProcessor: resize 384x384, CLIP mean/std
   special_tokens_map.json  tokenizer.json  tokenizer_config.json  vocab.txt
-  pytorch_model.bin          # git-ignored, 895,139,697 bytes — the executed artifact (pickle, digest-checked)
+  pytorch_model.bin          # git-ignored, 895,139,697 bytes — the pickle source (digest-checked), read once to convert
+  model.converted.safetensors  # git-ignored, 895,035,984 bytes — the served file (SHA-256 44387f268052…)
   README.md
 ```
 
