@@ -30,7 +30,7 @@ def _snapshot(root, tamper=False):
 
 
 def test_from_pretrained_refuses_without_snapshot_before_model_imports(tmp_path, forbid_model_imports):
-    with pytest.raises(FileNotFoundError, match="allow_download=False"):
+    with pytest.raises(FileNotFoundError, match="no verified snapshot"):
         BlipItmPipeline.from_pretrained(device="cpu", weights_dir=tmp_path, allow_download=False)
 
 

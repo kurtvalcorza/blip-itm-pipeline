@@ -98,7 +98,7 @@ CODE_MARKERS = (
     "reloaded = BlipItmPipeline.from_artifact(artifact_dir, weights_dir=WEIGHTS_DIR, device=pipe.device)",
     "raise RuntimeError(f'Reload parity failed: {parity}.",
     "weight_entry = next(entry for entry in MANIFEST['files'] if entry['path'] == WEIGHT_FILE)",
-    "'weight_format': 'pytorch_model.bin pickle, digest-verified, weights_only=True'",
+    "'weight_format': 'safetensors conversion of the digest-verified pytorch_model.bin, pinned SHA-256, strict load'",
     "'hosted_tf_weight_file_not_loaded': HOSTED_TF_WEIGHT_FILE",
     "'corpus': None if USE_BYOD else {'name': CORPUS_NAME, 'repo': CORPUS_REPO, 'revision': CORPUS_REVISION, 'release': CORPUS_RELEASE, 'license': CORPUS_LICENSE, 'text_columns': list(CORPUS_TEXT_COLUMNS), 'file': CORPUS_FILE, 'pinned_images': len(IMAGE_PINS), 'gallery_row_group': GALLERY_ROW_GROUP}",
     "'byod': byod,",
@@ -420,11 +420,13 @@ EXTERNAL_WEIGHT_BYTES: dict[int, str] = {
     77_202_384: "BLIP ITM fine-tune adapter.safetensors, 2 blocks, from the tutorial run",
     392_245_504: "mm-eval/VizWiz-Captions data/val-00004-of-00005.parquet at c4a6d89",
     895_599_664: "upstream tf_model.h5 of Salesforce/blip-itm-base-coco at bed8ad3 (not loaded)",
+    895035984: "safetensors conversion of pytorch_model.bin (served file, written by convert_checkpoint)",
 }
 EXTERNAL_WEIGHT_DIGESTS: dict[str, str] = {
     "4492465a41d32b3c12b8b7b6a0cf7e0a0e202a5b825b006ca0c85dcdf24efd3e": "mm-eval/VizWiz-Captions data/val-00004-of-00005.parquet at c4a6d89",
     "735c126984ca09ef7d7195730381de5ea24e5b5815810f8b0da9a7476c1728e3": "upstream tf_model.h5 of Salesforce/blip-itm-base-coco at bed8ad3 (not loaded)",
     "9799ebb13cf6a7e7c76afdd180892e21499ecefff697212ce4e505c7fc207d6e": "decoded-text digest of the 1,550 VizWiz-Captions tutorial rows",
+    "44387f268052c0c170d68e59ba2400a5d3b1362070ff007389335014c6e7b2e5": "safetensors conversion of pytorch_model.bin (CONVERTED_SHA256, the served file)",
 }
 _DIGEST = re.compile(r"(?<![0-9a-fA-F])[0-9a-f]{64}(?![0-9a-fA-F])")
 _GROUPED = r"(\d{1,3}(?:[,\u202f\u00a0 ]\d{3})+|\d+)"
