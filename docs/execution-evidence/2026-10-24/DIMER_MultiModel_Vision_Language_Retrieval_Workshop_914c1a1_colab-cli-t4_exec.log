@@ -1,0 +1,1020 @@
+[colab] Parsing notebook '<local-run-dir>/DIMER_MultiModel_Vision_Language_Retrieval_Workshop_914c1a1_colab-cli-t4.ipynb'...
+[colab] Executing cell 1/37 - Workshop controls...
+{'tier': 'STANDARD', 'rerank_top_k': 5, 'gallery_sizes': (70, 128, 256, 389)}
+[colab] Executing cell 2/37 - Carried stage file and hash lock (infrastructure)...
+Carried stage file and hash lock verified: ['requirements.lock.txt', 'retrieval_workshop.py']
+[colab] Executing cell 3/37 - Build the isolated runtime (pinned uv, CPython 3.12.12, hash-locked wheels)...
+GPU: Tesla T4
+Creating the isolated Python 3.12.12 environment...
+Installing the hashed dependency lock (several minutes; CUDA wheels are large)...
+{'python': '3.12.12', 'torch': '2.14.0+cu130', 'device': 'cuda:0', 'gpu': 'Tesla T4', 'lock_pins_checked': 61}
+True
+[colab] Executing cell 4/37 - Snapshot manifests...
+Model identities pinned: ['google/siglip2-base-patch16-224', 'google/siglip-base-patch16-256', 'Salesforce/blip-itm-base-coco']
+| model | model_id | revision | files | primary_weight | primary_bytes |        
+primary_sha256 | embedding_dim                                                  
+---|---|---|---|---|---|---|---|---                                             
+0 | siglip2 | google/siglip2-base-patch16-224 |                                 
+5ffaac51d5e2f3367f7dab0cad4be4cb07c0caa2 | 8 | model.safetensors | 1500800904 | 
+612923381c76ec5a9bed335d1c48827e3f2e506ac31b04... | 768                         
+1 | siglip1 | google/siglip-base-patch16-256 |                                  
+b078df89e446d623010d890864d4207fe6399f61 | 8 | model.safetensors | 812856640 |  
+f0cee7c815135c44a515eff72ab3040499744920442bc2... | 768                         
+2 | blip | Salesforce/blip-itm-base-coco |                                      
+bed8ad38cb2d04a5a4bdf2d071b3c3c0a4aa724c | 8 | pytorch_model.bin | 895139697 |  
+017fb3e7f4e125f13a8a4717f1402dbe0d0bb877474b4a... | 256                         
+[colab] Executing cell 5/37 - Fetch and verify the full pinned parquet shard...
+{'path': 'work/vizwiz/data/val-00004-of-00005.parquet', 'bytes': 392245504, 'sha256': '4492465a41d32b3c12b8b7b6a0cf7e0a0e202a5b825b006ca0c85dcdf24efd3e'}
+True
+[colab] Executing cell 6/37 - Decode row groups 0–1 and reproduce the 208/40/70 + 319 split...
+{'train': [208, 888], 'validation': [40, 179], 'test': [389, 1729]}
+role_digest 6b806c7c763060e2ac21fedacf87ba31b823bdb7e8f7e8af17c1122ace5a57dd
+near-duplicate audit (dHash, Hamming <= 10 ): {'train-train': 15, 'train-validation': 5, 'train-test': 48, 'validation-validation': 0, 'validation-test': 5, 'test-test': 51} | cross-role pairs: 58
+True
+[colab] Executing cell 7/37 - Dataset provenance...
+role_digest 6b806c7c763060e2ac21fedacf87ba31b823bdb7e8f7e8af17c1122ace5a57dd
+{'train_images': 208, 'validation_images': 40, 'test_images': 389, 'test_captions': 1729}
+Near-duplicate audit: 64-bit dHash (grayscale, 9x8 LANCZOS, horizontal gradient), Hamming distance <= 10 of 64; cross-role pairs: 58
+            role_pair  pairs_within_threshold  min_hamming
+          train-train                      15            3
+     train-validation                       5            6
+           train-test                      48            0
+validation-validation                       0           14
+      validation-test                       5            7
+            test-test                      51            1
+[colab] Executing cell 8/37 - Retrieval metrics...
+                                                                                
+ def gallery(records):                                                          
+     texts=[];owners=[]                                                         
+     for i,r in enumerate(records):                                             
+         for caption in r["captions"]:                                          
+             texts.append(str(caption));owners.append(i)                        
+     return texts,owners                                                        
+                                                                                
+ def retrieval_metrics(scores,owners):                                          
+     grid=np.asarray(scores,dtype=np.float64)                                   
+     owners=np.asarray(owners,dtype=int)                                        
+     if grid.ndim!=2 or grid.shape[1]!=len(owners):                             
+         raise ValueError("score grid/owner mismatch")                          
+     if set(owners.tolist())!=set(range(grid.shape[0])):                        
+         raise ValueError("every image must own at least one caption")          
+     if not np.isfinite(grid).all():                                            
+         raise ValueError("scores must be finite")                              
+                                                                                
+     i2t_ranks=[]                                                               
+     for i,row in enumerate(grid):                                              
+         order=np.argsort(-row,kind="stable")                                   
+         positions=np.flatnonzero(owners[order]==i)                             
+         i2t_ranks.append(int(positions[0])+1)                                  
+                                                                                
+     t2i_ranks=[]                                                               
+     for j,owner in enumerate(owners):                                          
+         order=np.argsort(-grid[:,j],kind="stable")                             
+         position=int(np.flatnonzero(order==owner)[0])+1                        
+         t2i_ranks.append(position)                                             
+                                                                                
+     out={"n_images":grid.shape[0],"n_captions":grid.shape[1]}                  
+     for k in RECALL_KS:                                                        
+         out[f"i2t_recall_at_{k}"]=float(np.mean(np.asarray(i2t_ranks)<=k))     
+         out[f"t2i_recall_at_{k}"]=float(np.mean(np.asarray(t2i_ranks)<=k))     
+     out["i2t_median_rank"]=float(np.median(i2t_ranks))                         
+     out["t2i_median_rank"]=float(np.median(t2i_ranks))                         
+     out["rsum"]=sum(out[f"{d}_recall_at_{k}"] for d in ("i2t","t2i") for k in  
+ RECALL_KS)                                                                     
+     return out                                                                 
+                                                                                
+ def canonical_caption_indices(owners,n_images):                                
+     owners=np.asarray(owners)                                                  
+     return [int(np.flatnonzero(owners==i)[0]) for i in range(n_images)]        
+                                                                                
+ def candidate_oracle(scores,owners,k):                                         
+     grid=np.asarray(scores);owners=np.asarray(owners)                          
+     i2t=[]                                                                     
+     for i,row in enumerate(grid):                                              
+         top=np.argsort(-row,kind="stable")[:min(k,grid.shape[1])]              
+         i2t.append(bool(np.any(owners[top]==i)))                               
+     queries=canonical_caption_indices(owners,grid.shape[0])                    
+     t2i=[]                                                                     
+     for j in queries:                                                          
+         top=np.argsort(-grid[:,j],kind="stable")[:min(k,grid.shape[0])]        
+         t2i.append(bool(owners[j] in top))                                     
+     return {                                                                   
+         "i2t_candidate_oracle":float(np.mean(i2t)),                            
+         "t2i_candidate_oracle":float(np.mean(t2i)),                            
+     }                                                                          
+                                                                                
+[colab] Executing cell 9/37 - Baselines...
+                                                                                
+ def expected_recall(n,total_positives,k):                                      
+     if k>=n:return 1.0                                                         
+     if total_positives<=0:return 0.0                                           
+     return 1.0 - comb(n-total_positives,k)/comb(n,k)                           
+                                                                                
+ def chance_baseline(records):                                                  
+     texts,owners=gallery(records)                                              
+     n_images=len(records);n_captions=len(texts)                                
+     out={"n_images":n_images,"n_captions":n_captions}                          
+     for k in RECALL_KS:                                                        
+         out[f"i2t_recall_at_{k}"]=sum(                                         
+             expected_recall(n_captions,len(r["captions"]),min(k,n_captions))   
+             for r in records                                                   
+         )/n_images                                                             
+         out[f"t2i_recall_at_{k}"]=min(k,n_images)/n_images                     
+     out["i2t_median_rank"]=None                                                
+     out["t2i_median_rank"]=(n_images+1)/2                                      
+     out["rsum"]=sum(out[f"{d}_recall_at_{k}"] for d in ("i2t","t2i") for k in  
+ RECALL_KS)                                                                     
+     return out                                                                 
+                                                                                
+ def colour_signature(path,grid=3):                                             
+     with Image.open(path) as im:                                               
+         small=im.convert("RGB").resize((grid*8,grid*8),Image.BILINEAR)         
+         arr=np.asarray(small,dtype=np.float32)/255.0                           
+     out=[]                                                                     
+     for y in range(grid):                                                      
+         for x in range(grid):                                                  
+             cell=arr[y*8:(y+1)*8,x*8:(x+1)*8]                                  
+             out.extend(cell.mean(axis=(0,1)).tolist())                         
+     return np.asarray(out,dtype=np.float32)                                    
+                                                                                
+ def tokens(text):                                                              
+     return set(re.findall(r"[a-z0-9]+",text.lower()))                          
+                                                                                
+ def unigram_f1(a,b):                                                           
+     aa=tokens(a);bb=tokens(b)                                                  
+     if not aa or not bb:return 0.0                                             
+     overlap=len(aa&bb)                                                         
+     if not overlap:return 0.0                                                  
+     p=overlap/len(aa);r=overlap/len(bb)                                        
+     return 2*p*r/(p+r)                                                         
+                                                                                
+ def colour_keyword_baseline(train,records):                                    
+     train_sig=[colour_signature(r["path"]) for r in train]                     
+     train_caps=[(c,i) for i,r in enumerate(train) for c in r["captions"]]      
+     texts,owners=gallery(records)                                              
+     test_sig=[colour_signature(r["path"]) for r in records]                    
+                                                                                
+     # T2I score grid.                                                          
+     t2i=np.zeros((len(records),len(texts)),dtype=np.float32)                   
+     for j,text in enumerate(texts):                                            
+         best=max(train_caps,key=lambda x:unigram_f1(text,x[0]))[1]             
+         for i,sig in enumerate(test_sig):                                      
+             t2i[i,j]=-float(np.linalg.norm(sig-train_sig[best]))               
+                                                                                
+     # I2T score grid.                                                          
+     i2t=np.zeros_like(t2i)                                                     
+     for i,sig in enumerate(test_sig):                                          
+         twin=min(range(len(train)),key=lambda                                  
+ t:float(np.linalg.norm(sig-train_sig[t])))                                     
+         twin_caps=train[twin]["captions"]                                      
+         for j,text in enumerate(texts):                                        
+             i2t[i,j]=max(unigram_f1(text,c) for c in twin_caps)                
+                                                                                
+     mt=retrieval_metrics(t2i,owners)                                           
+     mi=retrieval_metrics(i2t,owners)                                           
+     out={"n_images":len(records),"n_captions":len(texts)}                      
+     for k in RECALL_KS:                                                        
+         out[f"i2t_recall_at_{k}"]=mi[f"i2t_recall_at_{k}"]                     
+         out[f"t2i_recall_at_{k}"]=mt[f"t2i_recall_at_{k}"]                     
+     out["i2t_median_rank"]=mi["i2t_median_rank"]                               
+     out["t2i_median_rank"]=mt["t2i_median_rank"]                               
+     out["rsum"]=sum(out[f"{d}_recall_at_{k}"] for d in ("i2t","t2i") for k in  
+ RECALL_KS)                                                                     
+     return out                                                                 
+                                                                                
+[colab] Executing cell 10/37 - Stage exact model files...
+All model snapshots verified.
+True
+[colab] Executing cell 11/37 - SigLIP embedding wrapper...
+                                                                                
+ def siglip_embed(spec,root,records,texts,image_batch=16,text_batch=64):        
+     import traceback                                                           
+     model=None;processor=None                                                  
+     try:                                                                       
+         processor=AutoProcessor.from_pretrained(str(root),local_files_only=Tru 
+ e,trust_remote_code=False)                                                     
+         model=AutoModel.from_pretrained(                                       
+             str(root),local_files_only=True,trust_remote_code=False            
+         ).to(DEVICE).eval()                                                    
+                                                                                
+         image_chunks=[]                                                        
+         t0=time.perf_counter()                                                 
+         for start in range(0,len(records),image_batch):                        
+             images=[]                                                          
+             for r in records[start:start+image_batch]:                         
+                 with Image.open(r["path"]) as im:                              
+                     images.append(im.convert("RGB"))                           
+             batch=processor(images=images,return_tensors="pt").to(DEVICE)      
+             with torch.inference_mode():                                       
+                 feat=model.get_image_features(**batch)                         
+                 feat=F.normalize(feat,p=2,dim=-1)                              
+             image_chunks.append(feat.cpu())                                    
+         image_seconds=time.perf_counter()-t0                                   
+                                                                                
+         text_chunks=[]                                                         
+         t0=time.perf_counter()                                                 
+         for start in range(0,len(texts),text_batch):                           
+             chunk=[str(x).lower() for x in texts[start:start+text_batch]]      
+             batch=processor(                                                   
+                 text=chunk,padding="max_length",max_length=64,return_tensors=" 
+ pt"                                                                            
+             ).to(DEVICE)                                                       
+             with torch.inference_mode():                                       
+                 feat=model.get_text_features(**batch)                          
+                 feat=F.normalize(feat,p=2,dim=-1)                              
+             text_chunks.append(feat.cpu())                                     
+         text_seconds=time.perf_counter()-t0                                    
+                                                                                
+         images=torch.cat(image_chunks).numpy().astype(np.float32,copy=False)   
+         text=torch.cat(text_chunks).numpy().astype(np.float32,copy=False)      
+         model=None;processor=None                                              
+         gc.collect()                                                           
+         if torch.cuda.is_available():torch.cuda.empty_cache()                  
+                                                                                
+         return images,text,{                                                   
+             "image_embedding_seconds":image_seconds,                           
+             "text_embedding_seconds":text_seconds,                             
+         }                                                                      
+     except Exception as exc:                                                   
+         traceback.clear_frames(exc.__traceback__)                              
+         raise                                                                  
+     finally:                                                                   
+         model=None;processor=None;gc.collect()                                 
+         if torch.cuda.is_available():torch.cuda.empty_cache()                  
+                                                                                
+[colab] Executing cell 12/37 - BLIP embedding/reranking wrapper...
+                                                                                
+ class BlipWorkshop:                                                            
+     def __init__(self,root=None,device=None,spec=None):                        
+         # Moved from a notebook cell: resolve the defaults at construction,    
+ after configure()/load_torch().                                                
+         root=model_root("blip") if root is None else root                      
+         device=DEVICE if device is None else device                            
+         self.root=Path(root)                                                   
+         self.device=device                                                     
+         self.processor=BlipProcessor.from_pretrained(str(root),local_files_onl 
+ y=True)                                                                        
+         # Served from the pinned safetensors conversion (no pickle, no remote  
+ code), never pytorch_model.bin.                                                
+         self.model=load_blip_converted(spec or                                 
+ BLIP,root).to(torch.float32).to(device).eval()                                 
+                                                                                
+     def raw_image_embeds(self,records,batch_size=8):                           
+         out=[]                                                                 
+         t0=time.perf_counter()                                                 
+         for start in range(0,len(records),batch_size):                         
+             images=[]                                                          
+             for r in records[start:start+batch_size]:                          
+                 with Image.open(r["path"]) as im:                              
+                     images.append(im.convert("RGB"))                           
+             pixels=self.processor(images=images,return_tensors="pt")["pixel_va 
+ lues"].to(self.device)                                                         
+             with torch.inference_mode():                                       
+                 embeds=self.model.vision_model(pixel_values=pixels)[0]         
+             out.extend(e.detach().clone() for e in embeds)                     
+         return out,time.perf_counter()-t0                                      
+                                                                                
+     def image_features(self,raw_embeds,batch_size=64):                         
+         out=[]                                                                 
+         with torch.inference_mode():                                           
+             for start in range(0,len(raw_embeds),batch_size):                  
+                 stacked=torch.stack([x[0] for x in                             
+ raw_embeds[start:start+batch_size]])                                           
+                 out.append(F.normalize(self.model.vision_proj(stacked),dim=-1) 
+ .cpu())                                                                        
+         return torch.cat(out).numpy().astype(np.float32,copy=False)            
+                                                                                
+     def text_features(self,texts,batch_size=64):                               
+         out=[];t0=time.perf_counter()                                          
+         for start in range(0,len(texts),batch_size):                           
+             tokens=self.processor.tokenizer(                                   
+                 list(texts[start:start+batch_size]),padding=True,return_tensor 
+ s="pt"                                                                         
+             ).to(self.device)                                                  
+             with torch.inference_mode():                                       
+                 hidden=self.model.text_encoder(                                
+                     input_ids=tokens["input_ids"],attention_mask=tokens["atten 
+ tion_mask"]                                                                    
+                 )[0]                                                           
+                 out.append(F.normalize(self.model.text_proj(hidden[:,0,:]),dim 
+ =-1).cpu())                                                                    
+         return                                                                 
+ torch.cat(out).numpy().astype(np.float32,copy=False),time.perf_counter()-t0    
+                                                                                
+     def itm_probabilities(self,pairs,batch_size=16):                           
+         values=[]                                                              
+         t0=time.perf_counter()                                                 
+         for start in range(0,len(pairs),batch_size):                           
+             chunk=pairs[start:start+batch_size]                                
+             tokens=self.processor.tokenizer(                                   
+                 [text for _embed,text in                                       
+ chunk],padding=True,return_tensors="pt"                                        
+             ).to(self.device)                                                  
+             image_embeds=torch.stack([embed for embed,_text in                 
+ chunk]).to(self.device)                                                        
+             image_atts=torch.ones(image_embeds.shape[:2],dtype=torch.long,devi 
+ ce=self.device)                                                                
+             with torch.inference_mode():                                       
+                 hidden=self.model.text_encoder(                                
+                     input_ids=tokens["input_ids"],                             
+                     attention_mask=tokens["attention_mask"],                   
+                     encoder_hidden_states=image_embeds,                        
+                     encoder_attention_mask=image_atts,                         
+                 )[0]                                                           
+                 logits=self.model.itm_head(hidden[:,0,:])                      
+                 values.extend(torch.softmax(logits.float(),dim=-1)[:,1].cpu(). 
+ tolist())                                                                      
+         return values,time.perf_counter()-t0                                   
+                                                                                
+[colab] Executing cell 13/37 - Validation embeddings and metrics...
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+table: 3 rows x 12 columns
+| model | n_images | n_captions | i2t_recall_at_1 | t2i_recall_at_1 |           
+i2t_recall_at_5 | t2i_recall_at_5 | i2t_recall_at_10 | t2i_recall_at_10 |       
+i2t_median_rank | t2i_median_rank | rsum                                        
+---|---|---|---|---|---|---|---|---|---|---|---|---                             
+0 | siglip2 | 40 | 179 | 1.000 | 0.960894 | 1.000 | 1.0 | 1.000 | 1.0 | 1.0 |   
+1.0 | 5.960894                                                                  
+1 | siglip1 | 40 | 179 | 0.975 | 0.927374 | 1.000 | 1.0 | 1.000 | 1.0 | 1.0 |   
+1.0 | 5.902374                                                                  
+2 | blip_itc | 40 | 179 | 0.950 | 0.916201 | 0.975 | 1.0 | 0.975 | 1.0 | 1.0 |  
+1.0 | 5.816201                                                                  
+[colab] Executing cell 14/37 - Generic BLIP ITM reranker over arbitrary coarse score grids...
+                                                                                
+ def rerank_with_blip(blip,raw_image_embeds,texts,owners,coarse,k,hits=None):   
+     retrieval_metrics(coarse,owners)                                           
+     if coarse.shape[0]<2 or len(raw_image_embeds)!=coarse.shape[0] or          
+ len(texts)!=coarse.shape[1] or k<1:                                            
+         raise ValueError("Reranking needs aligned inputs, at least two images  
+ and positive k")                                                               
+     owners=np.asarray(owners,dtype=int)                                        
+     n_images=coarse.shape[0]                                                   
+                                                                                
+     # Image -> text (every photograph is a query).                             
+     pairs=[];pair_index=[];coarse_i2t_hits=[]                                  
+     for i in range(n_images):                                                  
+         top=np.argsort(-coarse[i],kind="stable")[:min(k,coarse.shape[1])]      
+         coarse_i2t_hits.append(bool(owners[int(top[0])]==i))                   
+         for j in top:                                                          
+             pairs.append((raw_image_embeds[i],texts[int(j)]))                  
+             pair_index.append((i,int(j)))                                      
+     probs,seconds_i2t=blip.itm_probabilities(pairs)                            
+     if len(probs)!=len(pair_index) or not np.isfinite(probs).all() or any(p<0  
+ or p>1 for p in probs):                                                        
+         raise ValueError("BLIP ITM returned invalid probability count/range")  
+     best={}                                                                    
+     for (i,j),p in zip(pair_index,probs,strict=True):                          
+         if i not in best or p>best[i][0]:                                      
+             best[i]=(p,j)                                                      
+     i2t_r1=float(np.mean([owners[j]==i for i,(_p,j) in best.items()]))         
+     itm_i2t_hits=[bool(owners[best[i][1]]==i) for i in range(n_images)]        
+                                                                                
+     # Canonical caption -> image (the first caption of every photograph is a   
+ query).                                                                        
+     queries=canonical_caption_indices(owners,n_images)                         
+     pairs=[];pair_index=[];coarse_t2i_hits=[]                                  
+     for j in queries:                                                          
+         top=np.argsort(-coarse[:,j],kind="stable")[:min(k,n_images)]           
+         coarse_t2i_hits.append(bool(int(top[0])==owners[j]))                   
+         for i in top:                                                          
+             pairs.append((raw_image_embeds[int(i)],texts[j]))                  
+             pair_index.append((int(i),j))                                      
+     probs2,seconds_t2i=blip.itm_probabilities(pairs)                           
+     if len(probs2)!=len(pair_index) or not np.isfinite(probs2).all() or        
+ any(p<0 or p>1 for p in probs2):                                               
+         raise ValueError("BLIP ITM returned invalid probability count/range")  
+     best2={}                                                                   
+     for (i,j),p in zip(pair_index,probs2,strict=True):                         
+         if j not in best2 or p>best2[j][0]:                                    
+             best2[j]=(p,i)                                                     
+     t2i_r1=float(np.mean([owners[j]==i for j,(_p,i) in best2.items()]))        
+     itm_t2i_hits=[bool(owners[j]==best2[j][1]) for j in queries]               
+                                                                                
+     # Hard-negative pair accuracy.                                             
+     pairs=[]                                                                   
+     for i,j_pos in enumerate(queries):                                         
+         row=coarse[i].copy()                                                   
+         row[owners==i]=-np.inf                                                 
+         j_neg=int(np.argmax(row))                                              
+         pairs.append((raw_image_embeds[i],texts[j_pos]))                       
+         pairs.append((raw_image_embeds[i],texts[j_neg]))                       
+     probs3,seconds_pair=blip.itm_probabilities(pairs)                          
+     if len(probs3)!=len(pairs) or not np.isfinite(probs3).all() or any(p<0 or  
+ p>1 for p in probs3):                                                          
+         raise ValueError("BLIP ITM returned invalid probability count/range")  
+     pair_accuracy=float(np.mean(np.asarray(probs3[0::2])>np.asarray(probs3[1:: 
+ 2])))                                                                          
+                                                                                
+     # Coarse R@1 on exactly the queries that were reranked, so each delta      
+ isolates the reranker.                                                         
+     coarse_i2t_r1=float(np.mean(coarse_i2t_hits))                              
+     coarse_t2i_r1_canonical=float(np.mean(coarse_t2i_hits))                    
+     # Same-query paired evidence for each delta: queries the reranker fixed    
+ and broke (SVR2-m2).                                                           
+     i2t_pair=paired_counts(itm_i2t_hits,coarse_i2t_hits);t2i_pair=paired_count 
+ s(itm_t2i_hits,coarse_t2i_hits)                                                
+     if hits is not None:                                                       
+         hits.update(coarse_i2t=np.asarray(coarse_i2t_hits,dtype=bool),itm_i2t= 
+ np.asarray(itm_i2t_hits,dtype=bool),                                           
+                     coarse_t2i=np.asarray(coarse_t2i_hits,dtype=bool),itm_t2i= 
+ np.asarray(itm_t2i_hits,dtype=bool))                                           
+     return {                                                                   
+         "rerank_top_k":k,                                                      
+         "i2t_queries":n_images,                                                
+         "coarse_i2t_r1":coarse_i2t_r1,                                         
+         "itm_i2t_recall_at_1":i2t_r1,                                          
+         "delta_i2t_r1":i2t_r1-coarse_i2t_r1,                                   
+         "t2i_queries":len(queries),                                            
+         "coarse_t2i_r1_canonical":coarse_t2i_r1_canonical,                     
+         "itm_t2i_recall_at_1":t2i_r1,                                          
+         "delta_t2i_r1":t2i_r1-coarse_t2i_r1_canonical,                         
+         "itm_pair_accuracy":pair_accuracy,                                     
+         "pair_evaluations":len(probs)+len(probs2)+len(probs3),                 
+         "seconds":seconds_i2t+seconds_t2i+seconds_pair,                        
+         **candidate_oracle(coarse,owners,k),                                   
+         "i2t_fixed_by_rerank":i2t_pair["only_a"],                              
+         "i2t_broken_by_rerank":i2t_pair["only_b"],                             
+         "i2t_rerank_exact_p":i2t_pair["exact_mcnemar_p"],                      
+         "t2i_fixed_by_rerank":t2i_pair["only_a"],                              
+         "t2i_broken_by_rerank":t2i_pair["only_b"],                             
+         "t2i_rerank_exact_p":t2i_pair["exact_mcnemar_p"],                      
+     }                                                                          
+                                                                                
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+table: 3 rows x 21 columns
+| candidate_source | rerank_top_k | i2t_queries | coarse_i2t_r1 |               
+itm_i2t_recall_at_1 | delta_i2t_r1 | t2i_queries | coarse_t2i_r1_canonical |    
+itm_t2i_recall_at_1 | delta_t2i_r1 | ... | pair_evaluations | seconds |         
+i2t_candidate_oracle | t2i_candidate_oracle | i2t_fixed_by_rerank |             
+i2t_broken_by_rerank | i2t_rerank_exact_p | t2i_fixed_by_rerank |               
+t2i_broken_by_rerank | t2i_rerank_exact_p                                       
+---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+---|---                                                                         
+0 | siglip2 | 5 | 40 | 1.000 | 1.000 | 0.000 | 40 | 0.950 | 0.95 | 0.000 | ... |
+480 | 3.711402 | 1.000 | 1.0 | 0 | 0 | 1.0 | 2 | 2 | 1.0                        
+1 | siglip1 | 5 | 40 | 0.975 | 1.000 | 0.025 | 40 | 0.925 | 0.95 | 0.025 | ... |
+480 | 3.394345 | 1.000 | 1.0 | 1 | 0 | 1.0 | 3 | 2 | 1.0                        
+2 | blip_itc | 5 | 40 | 0.950 | 0.975 | 0.025 | 40 | 0.925 | 0.95 | 0.025 | ... 
+| 480 | 3.503748 | 0.975 | 1.0 | 1 | 0 | 1.0 | 1 | 0 | 1.0                      
+
+3 rows × 21 columns                                                             
+[colab] Executing cell 15/37 - BLIP adaptation helpers...
+                                                                                
+ def blip_trainable_names(model,n_layers=2):                                    
+     total=len(model.text_encoder.encoder.layer)                                
+     first=total-n_layers                                                       
+     prefixes=tuple(f"text_encoder.encoder.layer.{k}." for k in                 
+ range(first,total))+(                                                          
+         "vision_proj.","text_proj.","itm_head.",                               
+     )                                                                          
+     return [name for name,_ in model.named_parameters() if                     
+ name.startswith(prefixes)]                                                     
+                                                                                
+ def blip_score_from_raw(blip,records,raw_embeds):                              
+     texts,owners=gallery(records)                                              
+     image_feat=blip.image_features(raw_embeds)                                 
+     text_feat,_=blip.text_features(texts)                                      
+     scores=image_feat@text_feat.T                                              
+     return retrieval_metrics(scores,owners),scores,texts,owners                
+                                                                                
+ def ensure_cross_image_batch(chosen,pairs):                                    
+     chosen=list(chosen)                                                        
+     if not chosen:raise ValueError("Empty BLIP training batch")                
+     owners={owner for owner,_ in chosen}                                       
+     if len(owners)<2:                                                          
+         other=next((pair for pair in pairs if pair[0] not in owners),None)     
+         if other is None:raise ValueError("BLIP adaptation needs at least two  
+ distinct image owners")                                                        
+         chosen.append(other)                                                   
+     return chosen                                                              
+                                                                                
+ def                                                                            
+ adapt_blip(blip,train,val,epochs=4,lr=2e-5,batch_size=16,n_layers=2,seed=0):   
+     model=blip.model                                                           
+     names=blip_trainable_names(model,n_layers)                                 
+     wanted=set(names)                                                          
+     for name,param in model.named_parameters():                                
+         param.requires_grad_(name in wanted)                                   
+     params=[p for p in model.parameters() if p.requires_grad]                  
+     optimizer=torch.optim.AdamW(params,lr=lr,weight_decay=0.01)                
+                                                                                
+     train_raw,_=blip.raw_image_embeds(train)                                   
+     val_raw,_=blip.raw_image_embeds(val)                                       
+                                                                                
+     pairs=[(i,str(c)) for i,r in enumerate(train) for c in r["captions"]]      
+     generator=torch.Generator().manual_seed(seed)                              
+                                                                                
+     def score_val():                                                           
+         model.eval()                                                           
+         metrics,_,_,_=blip_score_from_raw(blip,val,val_raw)                    
+         return metrics                                                         
+                                                                                
+     initial={k:v.detach().clone() for k,v in model.state_dict().items() if k   
+ in wanted}                                                                     
+     best={k:v.clone() for k,v in initial.items()}                              
+     history=[{"epoch":0,"train_loss":None,"val":score_val(),"note":"frozen     
+ model"}]                                                                       
+     best_epoch=0                                                               
+     best_score=history[0]["val"]["rsum"]                                       
+                                                                                
+     t0=time.perf_counter()                                                     
+     try:                                                                       
+         for epoch in range(1,epochs+1):                                        
+             model.train()                                                      
+             order=torch.randperm(len(pairs),generator=generator).tolist()      
+             losses=[]                                                          
+             for start in range(0,len(order),batch_size):                       
+                 chosen=[pairs[j] for j in order[start:start+batch_size]]       
+                 chosen=ensure_cross_image_batch(chosen,pairs)                  
+                                                                                
+                 image_index=torch.tensor([i for i,_ in chosen],device=DEVICE)  
+                 image_embeds=torch.stack([train_raw[i] for i,_ in              
+ chosen]).to(DEVICE)                                                            
+                 tokens=blip.processor.tokenizer(                               
+                     [c for _,c in chosen],padding=True,return_tensors="pt"     
+                 ).to(DEVICE)                                                   
+                                                                                
+                 text_hidden=model.text_encoder(                                
+                     input_ids=tokens["input_ids"],                             
+                     attention_mask=tokens["attention_mask"],                   
+                 )[0]                                                           
+                 text_feat=F.normalize(model.text_proj(text_hidden[:,0,:]),dim= 
+ -1)                                                                            
+                 image_feat=F.normalize(model.vision_proj(image_embeds[:,0,:]), 
+ dim=-1)                                                                        
+                 sim=image_feat@text_feat.T/ITC_TEMPERATURE                     
+                                                                                
+                 same=image_index[:,None].eq(image_index[None,:])               
+                 targets=same.float()                                           
+                 targets=targets/targets.sum(dim=1,keepdim=True)                
+                 log_i=torch.log_softmax(sim,dim=1)                             
+                 log_t=torch.log_softmax(sim.T,dim=1)                           
+                 loss_itc=-((targets*log_i).sum(1).mean()+(targets.T*log_t).sum 
+ (1).mean())/2                                                                  
+                                                                                
+                 with torch.no_grad():                                          
+                     w_text=torch.softmax(sim.detach().float(),dim=1)           
+                     w_text=w_text.masked_fill(same,0.0)                        
+                     w_text=w_text/(w_text.sum(dim=1,keepdim=True)+1e-12)       
+                                                                                
+                     w_image=torch.softmax(sim.detach().float().T,dim=1)        
+                     w_image=w_image.masked_fill(same.T,0.0)                    
+                     w_image=w_image/(w_image.sum(dim=1,keepdim=True)+1e-12)    
+                                                                                
+                     # Every normal batch contains at least two photographs.    
+ Refuse pathological batches.                                                   
+                     if torch.any(w_text.sum(dim=1)<=0) or                      
+ torch.any(w_image.sum(dim=1)<=0):                                              
+                         raise RuntimeError("BLIP batch lacks a valid           
+ cross-photograph hard negative")                                               
+                     neg_text=torch.multinomial(w_text,1).squeeze(1)            
+                     neg_image=torch.multinomial(w_image,1).squeeze(1)          
+                                                                                
+                 itm_images=torch.cat([image_embeds,image_embeds,image_embeds[n 
+ eg_image]])                                                                    
+                 itm_ids=torch.cat([                                            
+                     tokens["input_ids"],                                       
+                     tokens["input_ids"][neg_text],                             
+                     tokens["input_ids"],                                       
+                 ])                                                             
+                 itm_mask=torch.cat([                                           
+                     tokens["attention_mask"],                                  
+                     tokens["attention_mask"][neg_text],                        
+                     tokens["attention_mask"],                                  
+                 ])                                                             
+                 image_atts=torch.ones(itm_images.shape[:2],dtype=torch.long,de 
+ vice=DEVICE)                                                                   
+                                                                                
+                 fused=model.text_encoder(                                      
+                     input_ids=itm_ids,                                         
+                     attention_mask=itm_mask,                                   
+                     encoder_hidden_states=itm_images,                          
+                     encoder_attention_mask=image_atts,                         
+                 )[0]                                                           
+                 logits=model.itm_head(fused[:,0,:])                            
+                 labels=torch.cat([                                             
+                     torch.ones(len(chosen),dtype=torch.long,device=DEVICE),    
+                     torch.zeros(2*len(chosen),dtype=torch.long,device=DEVICE), 
+                 ])                                                             
+                 loss_itm=F.cross_entropy(logits,labels)                        
+                 loss=loss_itc+loss_itm                                         
+                                                                                
+                 optimizer.zero_grad(set_to_none=True)                          
+                 loss.backward()                                                
+                 torch.nn.utils.clip_grad_norm_(params,1.0)                     
+                 optimizer.step()                                               
+                 losses.append(float(loss.detach()))                            
+                                                                                
+             model.eval()                                                       
+             row={                                                              
+                 "epoch":epoch,                                                 
+                 "train_loss":float(np.mean(losses)),                           
+                 "val":score_val(),                                             
+             }                                                                  
+             history.append(row)                                                
+             print(row)                                                         
+             if row["val"]["rsum"]>best_score:                                  
+                 best_score=row["val"]["rsum"]                                  
+                 best_epoch=epoch                                               
+                 best={k:v.detach().clone() for k,v in                          
+ model.state_dict().items() if k in wanted}                                     
+     except BaseException:                                                      
+         merged=dict(model.state_dict());merged.update(initial)                 
+         model.load_state_dict(merged,strict=True)                              
+         model.eval()                                                           
+         for p in model.parameters():p.requires_grad_(False)                    
+         raise                                                                  
+                                                                                
+     merged=dict(model.state_dict());merged.update(best)                        
+     model.load_state_dict(merged,strict=True)                                  
+     model.eval()                                                               
+     for p in model.parameters():p.requires_grad_(False)                        
+                                                                                
+     return {                                                                   
+         "trainable_names":names,                                               
+         "n_trainable":sum(v.numel() for n,v in model.named_parameters() if n   
+ in wanted),                                                                    
+         "n_total":sum(p.numel() for p in model.parameters()),                  
+         "epochs":epochs,                                                       
+         "best_epoch":best_epoch,                                               
+         "selection":"highest validation rsum",                                 
+         "lr":lr,                                                               
+         "batch_size":batch_size,                                               
+         "itc_temperature":ITC_TEMPERATURE,                                     
+         "history":history,                                                     
+         "seconds":time.perf_counter()-t0,                                      
+     }                                                                          
+                                                                                
+ def save_verified_blip_adapter(blip,report,folder,validation):                 
+     folder=Path(folder);folder.mkdir(parents=True,exist_ok=True)               
+     names=report['trainable_names'];state=blip.model.state_dict()              
+     tensors={name:state[name].detach().cpu().contiguous() for name in names}   
+     path=folder/'adapter.safetensors';save_file(tensors,str(path),metadata={'f 
+ ormat':'pt'})                                                                  
+     records=validation[:2];texts,_=gallery(records)                            
+     raw,_=blip.raw_image_embeds(records);images=blip.image_features(raw);text, 
+ _=blip.text_features(texts)                                                    
+     np.save(folder/'validation_images.npy',images);np.save(folder/'validation_ 
+ texts.npy',text)                                                               
+     files=[{'path':p.name,'bytes':p.stat().st_size,'sha256':sha256_file(p)}    
+ for p in [path,folder/'validation_images.npy',folder/'validation_texts.npy']]  
+     manifest={'base':{'model_id':BLIP['model_id'],'revision':BLIP['revision']} 
+ ,'tensors':names,'files':files,                                                
+               'validation_ids':[r['image_id'] for r in                         
+ records],'history':report['history'],                                          
+               'selection':report['selection'],'format':'org.valcorza.blip-itm- 
+ base-coco.adapter.v1'}                                                         
+     (folder/'manifest.json').write_text(json.dumps(manifest,indent=2),encoding 
+ ='utf-8')                                                                      
+     return manifest                                                            
+                                                                                
+ def load_verified_blip_adapter(folder,validation):                             
+     import traceback                                                           
+     folder=Path(folder);manifest=json.loads((folder/'manifest.json').read_text 
+ ())                                                                            
+     if                                                                         
+ manifest['base']!={'model_id':BLIP['model_id'],'revision':BLIP['revision']}:   
+         raise ValueError('BLIP adapter base identity mismatch')                
+     expected=['adapter.safetensors','validation_images.npy','validation_texts. 
+ npy']                                                                          
+     if [f['path'] for f in manifest['files']]!=expected:raise                  
+ ValueError('Unexpected adapter files')                                         
+     for entry in manifest['files']:                                            
+         path=folder/entry['path']                                              
+         if path.stat().st_size!=entry['bytes'] or                              
+ sha256_file(path)!=entry['sha256']:                                            
+             raise ValueError('BLIP adapter/reference digest mismatch')         
+     fresh=None                                                                 
+     try:                                                                       
+         fresh=BlipWorkshop();tensors=load_file(str(folder/'adapter.safetensors 
+ '));state=fresh.model.state_dict()                                             
+         if sorted(tensors)!=sorted(manifest['tensors']):raise ValueError('BLIP 
+ adapter tensor list mismatch')                                                 
+         merged=dict(state)                                                     
+         for name,value in tensors.items():                                     
+             if name not in state or                                            
+ tuple(value.shape)!=tuple(state[name].shape):raise ValueError('BLIP adapter    
+ tensor shape mismatch')                                                        
+             merged[name]=value.to(state[name].dtype)                           
+         fresh.model.load_state_dict(merged,strict=True);fresh.model.eval()     
+         records=validation[:2]                                                 
+         if [r['image_id'] for r in records]!=manifest['validation_ids']:raise  
+ ValueError('Adapter validation identity mismatch')                             
+         texts,_=gallery(records);raw,_=fresh.raw_image_embeds(records)         
+         images=fresh.image_features(raw);text,_=fresh.text_features(texts)     
+         for actual,name in                                                     
+ [(images,'validation_images.npy'),(text,'validation_texts.npy')]:              
+             expected_array=np.load(folder/name,allow_pickle=False)             
+             if actual.shape!=expected_array.shape or not                       
+ np.isfinite(actual).all() or not                                               
+ np.allclose(actual,expected_array,rtol=1e-5,atol=1e-5):                        
+                 raise RuntimeError('Live adapted to fresh BLIP embedding       
+ parity failed')                                                                
+         return                                                                 
+ fresh,{'live_to_fresh_validation_parity':'PASS','adapter_sha256':manifest['fil 
+ es'][0]['sha256']}                                                             
+     except Exception as exc:                                                   
+         traceback.clear_frames(exc.__traceback__);fresh=None;gc.collect()      
+         if torch.cuda.is_available():torch.cuda.empty_cache()                  
+         raise                                                                  
+                                                                                
+[colab] Executing cell 16/37 - Optional FULL BLIP adaptation and artifact export...
+STANDARD: BLIP adaptation skipped.
+[colab] Executing cell 17/37 - Freeze experiment...
+Frozen: outputs/frozen/frozen_experiment.json
+True
+[colab] Executing cell 18/37 - Test baselines...
+table: 2 rows x 12 columns
+| model | n_images | n_captions | i2t_recall_at_1 | t2i_recall_at_1 |           
+i2t_recall_at_5 | t2i_recall_at_5 | i2t_recall_at_10 | t2i_recall_at_10 |       
+i2t_median_rank | t2i_median_rank | rsum                                        
+---|---|---|---|---|---|---|---|---|---|---|---|---                             
+0 | chance | 389 | 1729 | 0.002571 | 0.002571 | 0.012799 | 0.012853 | 0.025464 |
+0.025707 | NaN | 195.0 | 0.081965                                               
+1 | colour_keyword | 389 | 1729 | 0.007712 | 0.009254 | 0.020566 | 0.024291 |   
+0.035990 | 0.045113 | 253.0 | 180.0 | 0.142926                                  
+[colab] Executing cell 19/37 - SigLIP 2 test embeddings and index export...
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+{'n_images': 389, 'n_captions': 1729, 'i2t_recall_at_1': 0.7892030848329049, 't2i_recall_at_1': 0.7212261422787739, 'i2t_recall_at_5': 0.9280205655526992, 't2i_recall_at_5': 0.9034123770965876, 'i2t_recall_at_10': 0.961439588688946, 't2i_recall_at_10': 0.9386928860613071, 'i2t_median_rank': 1.0, 't2i_median_rank': 1.0, 'rsum': 5.241994644511219}
+True
+[colab] Executing cell 20/37 - SigLIP v1 test embeddings and index export...
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+{'n_images': 389, 'n_captions': 1729, 'i2t_recall_at_1': 0.781491002570694, 't2i_recall_at_1': 0.7160208212839791, 'i2t_recall_at_5': 0.922879177377892, 't2i_recall_at_5': 0.8849045691150954, 'i2t_recall_at_10': 0.9562982005141388, 't2i_recall_at_10': 0.9265471370734528, 'i2t_median_rank': 1.0, 't2i_median_rank': 1.0, 'rsum': 5.188140907935252}
+True
+[colab] Executing cell 21/37 - Fresh frozen BLIP test embeddings...
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+{'n_images': 389, 'n_captions': 1729, 'i2t_recall_at_1': 0.7403598971722365, 't2i_recall_at_1': 0.6524002313475997, 'i2t_recall_at_5': 0.9048843187660668, 't2i_recall_at_5': 0.8629265471370735, 'i2t_recall_at_10': 0.9434447300771208, 't2i_recall_at_10': 0.91844997108155, 'i2t_median_rank': 1.0, 't2i_median_rank': 1.0, 'rsum': 5.022465695581648}
+True
+[colab] Executing cell 22/37 - Retrieval comparison...
+table: 5 rows x 13 columns
+| model | dim | n_images | n_captions | i2t_recall_at_1 | t2i_recall_at_1 |     
+i2t_recall_at_5 | t2i_recall_at_5 | i2t_recall_at_10 | t2i_recall_at_10 |       
+i2t_median_rank | t2i_median_rank | rsum                                        
+---|---|---|---|---|---|---|---|---|---|---|---|---|---                         
+0 | chance | NaN | 389 | 1729 | 0.002571 | 0.002571 | 0.012799 | 0.012853 |     
+0.025464 | 0.025707 | NaN | 195.0 | 0.081965                                    
+1 | colour_keyword | NaN | 389 | 1729 | 0.007712 | 0.009254 | 0.020566 |        
+0.024291 | 0.035990 | 0.045113 | 253.0 | 180.0 | 0.142926                       
+2 | siglip_v1 | 768.0 | 389 | 1729 | 0.781491 | 0.716021 | 0.922879 | 0.884905 |
+0.956298 | 0.926547 | 1.0 | 1.0 | 5.188141                                      
+3 | siglip2 | 768.0 | 389 | 1729 | 0.789203 | 0.721226 | 0.928021 | 0.903412 |  
+0.961440 | 0.938693 | 1.0 | 1.0 | 5.241995                                      
+4 | blip_itc | 256.0 | 389 | 1729 | 0.740360 | 0.652400 | 0.904884 | 0.862927 | 
+0.943445 | 0.918450 | 1.0 | 1.0 | 5.022466                                      
+[colab] Executing cell 23/37 - BLIP ITC sensitivity row (Flickr30k fine-tune)...
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+table: 1 rows x 13 columns
+| model | dim | n_images | n_captions | i2t_recall_at_1 | t2i_recall_at_1 |     
+i2t_recall_at_5 | t2i_recall_at_5 | i2t_recall_at_10 | t2i_recall_at_10 |       
+i2t_median_rank | t2i_median_rank | rsum                                        
+---|---|---|---|---|---|---|---|---|---|---|---|---|---                         
+0 | chance | NaN | 389 | 1729 | 0.002571 | 0.002571 | 0.012799 | 0.012853 |     
+0.025464 | 0.025707 | NaN | 195.0 | 0.081965                                    
+1 | colour_keyword | NaN | 389 | 1729 | 0.007712 | 0.009254 | 0.020566 |        
+0.024291 | 0.035990 | 0.045113 | 253.0 | 180.0 | 0.142926                       
+2 | siglip_v1 | 768.0 | 389 | 1729 | 0.781491 | 0.716021 | 0.922879 | 0.884905 |
+0.956298 | 0.926547 | 1.0 | 1.0 | 5.188141                                      
+3 | siglip2 | 768.0 | 389 | 1729 | 0.789203 | 0.721226 | 0.928021 | 0.903412 |  
+0.961440 | 0.938693 | 1.0 | 1.0 | 5.241995                                      
+4 | blip_itc | 256.0 | 389 | 1729 | 0.740360 | 0.652400 | 0.904884 | 0.862927 | 
+0.943445 | 0.918450 | 1.0 | 1.0 | 5.022466                                      
+5 | blip_itc_flickr (sensitivity) | 256.0 | 389 | 1729 | 0.670951 | 0.605552 |  
+0.866324 | 0.813187 | 0.933162 | 0.875072 | 1.0 | 1.0 | 4.764248                
+Rows 1-5 are the principal table above, unchanged; the last row is the sensitivity row.
+[colab] Executing cell 24/37 - Frozen BLIP ITM reranking...
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+table: 3 rows x 12 columns
+| candidate_source | coarse_i2t_r1 | itm_i2t_recall_at_1 | delta_i2t_r1 |       
+coarse_t2i_r1_canonical | itm_t2i_recall_at_1 | delta_t2i_r1 |                  
+i2t_candidate_oracle | t2i_candidate_oracle | itm_pair_accuracy |               
+pair_evaluations | seconds                                                      
+---|---|---|---|---|---|---|---|---|---|---|---|---                             
+0 | siglip_v1 | 0.7815 | 0.8329 | 0.0514 | 0.6632 | 0.7326 | 0.0694 | 0.9229 |  
+0.8740 | 0.7661 | 4668 | 36.9523                                                
+1 | siglip2 | 0.7892 | 0.8406 | 0.0514 | 0.6864 | 0.7301 | 0.0437 | 0.9280 |    
+0.8869 | 0.7789 | 4668 | 39.0483                                                
+2 | blip_itc | 0.7404 | 0.8021 | 0.0617 | 0.6247 | 0.7069 | 0.0823 | 0.9049 |   
+0.8535 | 0.6812 | 4668 | 37.4355                                                
+[colab] Executing cell 25/37 - Paired differences, photograph-bootstrap intervals and discordant counts (display-only)...
+24 exploratory paired comparisons. difference_pp and its photograph-bootstrap interval (2000 resamples, seed 0) describe this gallery; exact_mcnemar_p is the exact binomial calculation, assumes independent queries and is unadjusted for multiple comparisons.
+table: 24 rows x 16 columns
+                                         comparison                                                 measure                       query_unit  queries   a_r1   b_r1  both_correct  only_a  only_b  neither  gap_queries  exact_mcnemar_p  difference_pp  ci95_low_pp  ci95_high_pp  bootstrap_photographs
+                               siglip2 vs siglip_v1                       coarse I2T R@1 (every photograph)                       photograph      389 0.7892 0.7815           278      29      26       56            3           0.7877         0.7712      -3.0848        4.3702                    389
+                               siglip2 vs siglip_v1                           coarse T2I R@1 (all captions) caption, clustered by photograph     1729 0.7212 0.7160          1123     124     115      367            9           0.6049         0.5205      -1.6920        2.7032                    389
+                               siglip2 vs siglip_v1           coarse T2I R@1 (first caption per photograph)                       photograph      389 0.6864 0.6632           232      35      26       96            9           0.3057         2.3136      -1.5424        6.1697                    389
+                                siglip2 vs blip_itc                       coarse I2T R@1 (every photograph)                       photograph      389 0.7892 0.7404           260      47      28       54           19           0.0370         4.8843       0.2571        9.5116                    389
+                                siglip2 vs blip_itc                           coarse T2I R@1 (all captions) caption, clustered by photograph     1729 0.7212 0.6524           989     258     139      343          119           0.0000         6.8826       4.0959        9.6901                    389
+                                siglip2 vs blip_itc           coarse T2I R@1 (first caption per photograph)                       photograph      389 0.6864 0.6247           206      61      37       85           24           0.0197         6.1697       1.2789       11.0540                    389
+                              siglip_v1 vs blip_itc                       coarse I2T R@1 (every photograph)                       photograph      389 0.7815 0.7404           253      51      35       50           16           0.1052         4.1131      -0.5141        8.7404                    389
+                              siglip_v1 vs blip_itc                           coarse T2I R@1 (all captions) caption, clustered by photograph     1729 0.7160 0.6524           976     262     152      339          110           0.0000         6.3621       3.3985        9.1861                    389
+                              siglip_v1 vs blip_itc           coarse T2I R@1 (first caption per photograph)                       photograph      389 0.6632 0.6247           200      58      43       88           15           0.1633         3.8560      -1.2853        8.7404                    389
+                        blip_itc_flickr vs blip_itc                       coarse I2T R@1 (every photograph)                       photograph      389 0.6710 0.7404           238      23      50       78          -27           0.0021        -6.9409     -11.0540       -3.0784                    389
+                        blip_itc_flickr vs blip_itc                           coarse T2I R@1 (all captions) caption, clustered by photograph     1729 0.6056 0.6524           951      96     177      505          -81           0.0000        -4.6848      -7.0119       -2.2878                    389
+                        blip_itc_flickr vs blip_itc           coarse T2I R@1 (first caption per photograph)                       photograph      389 0.5835 0.6247           200      27      43      119          -16           0.0722        -4.1131      -8.4833        0.2571                    389
+ siglip2 vs siglip_v1 candidates, same ITM reranker                     reranked I2T R@1 (every photograph)                       photograph      389 0.8406 0.8329           311      16      13       49            3           0.7111         0.7712      -2.0566        3.3419                    389
+ siglip2 vs siglip_v1 candidates, same ITM reranker         reranked T2I R@1 (first caption per photograph)                       photograph      389 0.7301 0.7326           273      11      12       93           -1           1.0000        -0.2571      -2.5707        2.0566                    389
+  siglip2 vs blip_itc candidates, same ITM reranker                     reranked I2T R@1 (every photograph)                       photograph      389 0.8406 0.8021           300      27      12       50           15           0.0237         3.8560       0.7712        7.1979                    389
+  siglip2 vs blip_itc candidates, same ITM reranker         reranked T2I R@1 (first caption per photograph)                       photograph      389 0.7301 0.7069           264      20      11       94            9           0.1496         2.3136      -0.5141        5.1414                    389
+siglip_v1 vs blip_itc candidates, same ITM reranker                     reranked I2T R@1 (every photograph)                       photograph      389 0.8329 0.8021           294      30      18       47           12           0.1114         3.0848      -0.2571        6.6838                    389
+siglip_v1 vs blip_itc candidates, same ITM reranker         reranked T2I R@1 (first caption per photograph)                       photograph      389 0.7326 0.7069           264      21      11       93           10           0.1102         2.5707      -0.2571        5.3985                    389
+        ITM rerank vs coarse (siglip_v1 candidates) I2T R@1, same queries (only_a = fixed, only_b = broken)                       photograph      389 0.8329 0.7815           292      32      12       53           20           0.0037         5.1414       1.7995        8.4833                    389
+        ITM rerank vs coarse (siglip_v1 candidates) T2I R@1, same queries (only_a = fixed, only_b = broken)                       photograph      389 0.7326 0.6632           233      52      25       79           27           0.0028         6.9409       2.8278       11.5681                    389
+          ITM rerank vs coarse (siglip2 candidates) I2T R@1, same queries (only_a = fixed, only_b = broken)                       photograph      389 0.8406 0.7892           289      38      18       44           20           0.0105         5.1414       1.5424        8.9974                    389
+          ITM rerank vs coarse (siglip2 candidates) T2I R@1, same queries (only_a = fixed, only_b = broken)                       photograph      389 0.7301 0.6864           237      47      30       75           17           0.0675         4.3702       0.0000        8.7404                    389
+         ITM rerank vs coarse (blip_itc candidates) I2T R@1, same queries (only_a = fixed, only_b = broken)                       photograph      389 0.8021 0.7404           281      31       7       70           24           0.0001         6.1697       3.0848        9.5116                    389
+         ITM rerank vs coarse (blip_itc candidates) T2I R@1, same queries (only_a = fixed, only_b = broken)                       photograph      389 0.7069 0.6247           231      44      12      102           32           0.0000         8.2262       4.8843       12.0823                    389
+[colab] Executing cell 26/37 - FULL fresh BLIP reload and test...
+STANDARD: adapted BLIP test skipped.
+[colab] Executing cell 27/37 - Nested gallery sizes...
+table: 12 rows x 7 columns
+| gallery_images | captions | model | chance_t2i_r1 | i2t_r1 | t2i_r1 | rsum    
+---|---|---|---|---|---|---|---                                                 
+0 | 70 | 323 | siglip_v1 | 0.014286 | 0.942857 | 0.869969 | 5.791154            
+1 | 70 | 323 | siglip2 | 0.014286 | 0.900000 | 0.879257 | 5.763777              
+2 | 70 | 323 | blip_itc | 0.014286 | 0.928571 | 0.835913 | 5.721141             
+3 | 128 | 577 | siglip_v1 | 0.007812 | 0.882812 | 0.811092 | 5.563015           
+4 | 128 | 577 | siglip2 | 0.007812 | 0.875000 | 0.833622 | 5.628019             
+5 | 128 | 577 | blip_itc | 0.007812 | 0.828125 | 0.772964 | 5.429430            
+6 | 256 | 1126 | siglip_v1 | 0.003906 | 0.820312 | 0.744227 | 5.313062          
+7 | 256 | 1126 | siglip2 | 0.003906 | 0.812500 | 0.759325 | 5.358889            
+8 | 256 | 1126 | blip_itc | 0.003906 | 0.742188 | 0.690941 | 5.103519           
+9 | 389 | 1729 | siglip_v1 | 0.002571 | 0.781491 | 0.716021 | 5.188141          
+10 | 389 | 1729 | siglip2 | 0.002571 | 0.789203 | 0.721226 | 5.241995           
+11 | 389 | 1729 | blip_itc | 0.002571 | 0.740360 | 0.652400 | 5.022466          
+[colab] Executing cell 28/37 - Fixed queries (70 core photographs), growing candidate gallery (display-only)...
+table: 12 rows x 8 columns
+ gallery_images  candidate_captions  query_photographs  query_captions     model  chance_t2i_r1  i2t_r1  t2i_r1
+             70                 323                 70             323 siglip_v1         0.0143  0.9429  0.8700
+             70                 323                 70             323   siglip2         0.0143  0.9000  0.8793
+             70                 323                 70             323  blip_itc         0.0143  0.9286  0.8359
+            128                 577                 70             323 siglip_v1         0.0078  0.9000  0.8359
+            128                 577                 70             323   siglip2         0.0078  0.8714  0.8576
+            128                 577                 70             323  blip_itc         0.0078  0.8857  0.7926
+            256                1126                 70             323 siglip_v1         0.0039  0.8429  0.7647
+            256                1126                 70             323   siglip2         0.0039  0.8571  0.8080
+            256                1126                 70             323  blip_itc         0.0039  0.8143  0.7399
+            389                1729                 70             323 siglip_v1         0.0026  0.8000  0.7368
+            389                1729                 70             323   siglip2         0.0026  0.8286  0.7709
+            389                1729                 70             323  blip_itc         0.0026  0.7857  0.6718
+[colab] Executing cell 29/37 - Category and caption-length metrics...
+table: 6 rows x 10 columns
+table: 9 rows x 5 columns
+| model | category | n_images | n_captions | full_gallery_i2t_r1 |              
+full_gallery_t2i_r1 | subgallery_i2t_r1 | subgallery_t2i_r1 | subgallery_rsum | 
+subgallery_chance_t2i_r1                                                        
+---|---|---|---|---|---|---|---|---|---|---                                     
+0 | siglip_v1 | no-text | 160 | 659 | 0.737500 | 0.735964 | 0.775000 | 0.757208 
+| 5.308934 | 0.006250                                                           
+1 | siglip_v1 | text | 229 | 1070 | 0.812227 | 0.703738 | 0.820961 | 0.719626 | 
+5.286912 | 0.004367                                                             
+2 | siglip2 | no-text | 160 | 659 | 0.762500 | 0.740516 | 0.775000 | 0.781487 | 
+5.365440 | 0.006250                                                             
+3 | siglip2 | text | 229 | 1070 | 0.807860 | 0.709346 | 0.807860 | 0.730841 |   
+5.325230 | 0.004367                                                             
+4 | blip_itc | no-text | 160 | 659 | 0.787500 | 0.723824 | 0.812500 | 0.775417 |
+5.401783 | 0.006250                                                             
+5 | blip_itc | text | 229 | 1070 | 0.707424 | 0.608411 | 0.729258 | 0.628037 |  
+4.950235 | 0.004367                                                             
+| model | caption_length | n | t2i_r1 | t2i_median_rank                         
+---|---|---|---|---|---                                                         
+0 | siglip_v1 | short | 779 | 0.675225 | 1.0                                    
+1 | siglip_v1 | medium | 524 | 0.685115 | 1.0                                   
+2 | siglip_v1 | long | 426 | 0.828638 | 1.0                                     
+3 | siglip2 | short | 779 | 0.668806 | 1.0                                      
+4 | siglip2 | medium | 524 | 0.719466 | 1.0                                     
+5 | siglip2 | long | 426 | 0.819249 | 1.0                                       
+6 | blip_itc | short | 779 | 0.582798 | 1.0                                     
+7 | blip_itc | medium | 524 | 0.646947 | 1.0                                    
+8 | blip_itc | long | 426 | 0.786385 | 1.0                                      
+[colab] Executing cell 30/37 - Rank diagnostics...
+                                                                                
+ def image_best_correct_and_wrong(scores,records,texts,owners):                 
+     owners=np.asarray(owners)                                                  
+     rows=[]                                                                    
+     for i,row in enumerate(scores):                                            
+         correct=np.flatnonzero(owners==i)                                      
+         wrong=np.flatnonzero(owners!=i)                                        
+         best_correct=int(correct[np.argmax(row[correct])])                     
+         best_wrong=int(wrong[np.argmax(row[wrong])])                           
+         order=np.argsort(-row,kind="stable")                                   
+         correct_rank=int(np.flatnonzero(order==best_correct)[0])+1             
+         rows.append({                                                          
+             "image_index":i,                                                   
+             "image_id":records[i]["image_id"],                                 
+             "correct_rank":correct_rank,                                       
+             "best_correct_caption":texts[best_correct],                        
+             "best_wrong_caption":texts[best_wrong],                            
+             "correct_score":float(row[best_correct]),                          
+             "wrong_score":float(row[best_wrong]),                              
+             "margin":float(row[best_correct]-row[best_wrong]),                 
+         })                                                                     
+     return pd.DataFrame(rows)                                                  
+                                                                                
+table: 5 rows x 6 columns
+| image_index | siglip2_rank | siglip1_rank | blip_rank | siglip2_vs_v1 |       
+siglip2_vs_blip                                                                 
+---|---|---|---|---|---|---                                                     
+146 | 146 | 485 | 756 | 600 | 271 | 115                                         
+76 | 76 | 19 | 251 | 12 | 232 | -7                                              
+193 | 193 | 33 | 244 | 29 | 211 | -4                                            
+203 | 203 | 194 | 293 | 1191 | 99 | 997                                         
+320 | 320 | 34 | 132 | 51 | 98 | 17                                             
+[colab] Executing cell 31/37 - Show deterministic retrieval disagreement examples...
+Figures: ['outputs/figures/extreme_siglip2_over_v1.png', 'outputs/figures/extreme_v1_over_siglip2.png', 'outputs/figures/extreme_siglip2_over_blip_itc.png']
+Selected extreme: largest SigLIP2 rank gain over SigLIP v1
+<IPython.core.display.Image object>
+
+[Image saved to: /tmp/tmpppkxd30y.png]
+Selected extreme: largest SigLIP v1 rank gain over SigLIP2
+<IPython.core.display.Image object>
+
+[Image saved to: /tmp/tmpq9xtylz1.png]
+Selected extreme: largest SigLIP2 rank gain over BLIP ITC
+<IPython.core.display.Image object>
+
+[Image saved to: /tmp/tmpn4zgjw_o.png]
+[colab] Executing cell 32/37 - Runtime and storage table...
+table: 3 rows x 6 columns
+siglip_v1 median matrix-search ms/query 0.03695249995416816
+siglip2 median matrix-search ms/query 0.055854500033092336
+blip_itc median matrix-search ms/query 0.0168440000152259
+| model | dim | bytes_per_float32_vector | one_million_vectors_GB |             
+image_embedding_seconds | text_embedding_seconds                                
+---|---|---|---|---|---|---                                                     
+0 | siglip_v1 | 768 | 3072 | 3.072 | 16.413131 | 5.476415                       
+1 | siglip2 | 768 | 3072 | 3.072 | 12.728588 | 5.238562                         
+2 | blip_itc | 256 | 1024 | 1.024 | 16.602362 | 3.399465                        
+[colab] Executing cell 33/37 - Index manifest and reload ranking parity...
+                                                                                
+ def verify_index_pair(root,image_entry,text_entry,reference):                  
+     for entry in (image_entry,text_entry):                                     
+         path=Path(root)/entry["path"]                                          
+         if path.stat().st_size!=entry["bytes"] or                              
+ sha256_file(path)!=entry["sha256"]:                                            
+             raise ValueError("Index digest/size mismatch")                     
+     img=np.load(Path(root)/image_entry["path"],allow_pickle=False)             
+     txt=np.load(Path(root)/text_entry["path"],allow_pickle=False)              
+     if img.ndim!=2 or txt.ndim!=2 or img.shape[1]!=txt.shape[1] or not         
+ np.isfinite(img).all() or not np.isfinite(txt).all():                          
+         raise ValueError("Index shape or finite-value mismatch")               
+     replay=img@txt.T                                                           
+     if replay.shape!=reference.shape or not                                    
+ np.allclose(replay,reference,atol=1e-6,rtol=1e-6):                             
+         raise RuntimeError("Index reload score parity failed")                 
+     for axis in (0,1):                                                         
+         if not                                                                 
+ np.array_equal(np.argsort(-replay,axis=axis,kind="stable"),np.argsort(-referen 
+ ce,axis=axis,kind="stable")):                                                  
+             raise RuntimeError("Index reload ranking parity failed")           
+     return img,txt                                                             
+                                                                                
+Full index digest/shape/reload ranking parity: PASS
+True
+[colab] Executing cell 34/37 - Caption perturbation (validation) and no-match nearest neighbours...
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+Query: a satellite orbiting mars
+Evaluation status: no ground-truth match — nearest-neighbor behavior only
+0.07880676537752151 Black image with a brown object in the lower right hand corner.
+0.07569533586502075 Some sort of fossilized item that is framed.
+0.06391437351703644 a kitchen counter with dishes on the drainer
+Query: an underwater coral reef
+Evaluation status: no ground-truth match — nearest-neighbor behavior only
+0.052676714956760406 A road with brown rocks on it has some white snow on it.
+0.04978126287460327 Black image with a brown object in the lower right hand corner.
+0.04779845476150513 I see the color olive green with yellow shadings blurring into olive on the right side.
+table: 3 rows x 8 columns
+| split | model | variant | changed_captions | t2i_recall_at_1 | t2i_recall_at_5
+| i2t_recall_at_1 | rsum                                                        
+---|---|---|---|---|---|---|---|---                                             
+0 | validation | siglip2 | original | 0 | 0.9609 | 1.0000 | 1.0 | 5.9609        
+1 | validation | siglip2 | lowercase | 149 | 0.9609 | 1.0000 | 1.0 | 5.9609     
+2 | validation | siglip2 | first_five_words | 179 | 0.6648 | 0.8827 | 0.9 |     
+5.3916                                                                          
+[colab] Executing cell 35/37 - 05f2bcd3...
+BYOD disabled; canonical VizWiz workflow completed.
+[colab] Executing cell 36/37 - Final provenance export...
+{'bundle': '/content/outputs_DIMER_Vision_Language_Retrieval_Report.zip', 'files': 31, 'sha256': 'fb400d9df7c969be357a9683655432641ded69010de8c365e2cccbaf99dd224b'}
+True
+[colab] Executing cell 37/37 - Run-all completion summary...
+| value                                                                         
+---|---                                                                         
+notebook_spec | 2.5                                                             
+profile | MULTI-CAPABILITY                                                      
+mode | WORKSHOP                                                                 
+tier | STANDARD                                                                 
+models | [SigLIP v1, SigLIP 2, BLIP ITC/ITM]                                    
+comparison_scope | whole checkpoints (training regime, input reso...            
+test_gallery_images | 389                                                       
+test_gallery_captions | 1729                                                    
+rerank_top_k | 5                                                                
+test_r1_i2t / t2i (all captions) | {'chance': '0.003 / 0.003', 'colour_keyword':
+...                                                                             
+reranked R@1 (same queries: coarse -> ITM) | {'siglip_v1': 'I2T 0.781 -> 0.833; 
+T2I first c...                                                                  
+full_adaptation | not run (STANDARD)                                            
+byod | not run                                                                  
+index_directory | /content/outputs/index                                        
+output_directory | /content/outputs                                             
+release_status | candidate                                                      
+Vision-language retrieval workshop complete. Interpret results as one-gallery sample-sanity evidence, not a universal model ranking.
+[colab] Saving notebook with outputs to '<local-run-dir>/DIMER_MultiModel_Vision_Language_Retrieval_Workshop_914c1a1_colab-cli-t4_output.ipynb'...
