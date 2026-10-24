@@ -108,6 +108,8 @@ BLIP = {
         ("tokenizer_config.json",456,"86da6fdb761b02f73a05561aba71711c2d7c205fe1fd1744046173a410263925"),
         ("vocab.txt",231508,"07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3"),
     ],
+    # Served file: the pinned safetensors conversion of pytorch_model.bin (convert_blip_weights).
+    "converted":("model.converted.safetensors",895035984,"44387f268052c0c170d68e59ba2400a5d3b1362070ff007389335014c6e7b2e5"),
     "dim":256,
 }
 # Sensitivity row (SVR2-M1): the same BLIP ITM base architecture and 384x384 input, fine-tuned for
@@ -127,6 +129,8 @@ BLIP_FLICKR = {
         ("tokenizer_config.json",456,"86da6fdb761b02f73a05561aba71711c2d7c205fe1fd1744046173a410263925"),
         ("vocab.txt",231508,"07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3"),
     ],
+    # Served file: the pinned safetensors conversion of pytorch_model.bin (convert_blip_weights).
+    "converted":("model.converted.safetensors",895035984,"1a9a322b453f5b6febb835dcc66e72be3fd5470abfbb88d790da96c4387bcd90"),
     "dim":256,
 }
 
@@ -517,7 +521,70 @@ def stage_snapshot(spec,root):
         ))
         if path.stat().st_size!=size or sha256_file(path)!=digest:
             raise ValueError(f"{spec['model_id']} {name}: digest/size mismatch")
+    if "converted" in spec:
+        convert_blip_weights(spec,root)
     return root
+
+# ---- BLIP weights: served from a pinned safetensors conversion ---------------------------------------
+# Upstream publishes BLIP ITM only as pytorch_model.bin (a pickle). After its size and SHA-256 check, the
+# file is read once with torch.load(weights_only=True), mapped onto the model built from the verified
+# config.json and strict-loaded; the model's state dict is written as safetensors (one-key metadata, so the
+# bytes are reproducible) and must hash to the pinned spec["converted"] digest. BlipWorkshop builds the
+# model from config.json and strict-loads that file; nothing deserialises the pickle again.
+
+def _blip_from_config(root):
+    load_transformers()
+    from transformers import BlipConfig
+    config=BlipConfig.from_pretrained(str(root),local_files_only=True)
+    if "BlipForImageTextRetrieval" not in (config.architectures or []):
+        raise ValueError(f"{root}/config.json names {config.architectures}, not BlipForImageTextRetrieval")
+    return BlipForImageTextRetrieval(config)
+
+def convert_blip_weights(spec,root):
+    """Write root/<converted name> from the verified pytorch_model.bin once; return its path."""
+    root=Path(root)
+    name,size,digest=spec["converted"]
+    target=root/name
+    if target.is_file() and target.stat().st_size==size and sha256_file(target)==digest:
+        return target
+    source_name,source_size,source_digest=[f for f in spec["files"] if f[0]=="pytorch_model.bin"][0]
+    source=root/source_name
+    if source.stat().st_size!=source_size or sha256_file(source)!=source_digest:
+        raise ValueError(f"{spec['model_id']} {source_name}: digest/size mismatch; refusing to deserialise it")
+    model=_blip_from_config(root)
+    state=torch.load(source,map_location="cpu",weights_only=True)
+    if not isinstance(state,dict) or any(not isinstance(v,torch.Tensor) for v in state.values()):
+        raise ValueError(f"{source_name} did not unpickle to a flat state dict of tensors")
+    expected=model.state_dict();buffers=dict(model.named_buffers())
+    prepared={}
+    for key,tensor in state.items():
+        if key in expected:
+            prepared[key]=tensor
+        elif key in buffers and torch.equal(buffers[key].cpu(),tensor):
+            continue  # a non-persistent buffer (position_ids) the model rebuilds identically
+        else:
+            raise ValueError(f"{source_name}: unexpected tensor {key!r}")
+    model.load_state_dict(prepared,strict=True)
+    from safetensors.torch import save
+    tensors={k:v.detach().to("cpu").contiguous().clone() for k,v in model.state_dict().items()}
+    data=save(tensors,metadata={"format":"pt"})
+    got=hashlib.sha256(data).hexdigest()
+    if got!=digest or len(data)!=size:
+        raise ValueError(f"{spec['model_id']}: conversion hashed to {got} ({len(data)} bytes), not the pinned {digest}")
+    partial=target.with_name(target.name+".partial")
+    partial.write_bytes(data);partial.replace(target)
+    return target
+
+def load_blip_converted(spec,root):
+    """BlipForImageTextRetrieval from the verified config.json, strict-loaded from the pinned conversion."""
+    root=Path(root)
+    name,size,digest=spec["converted"]
+    path=root/name
+    if not path.is_file() or path.stat().st_size!=size or sha256_file(path)!=digest:
+        raise ValueError(f"{spec['model_id']} {name}: missing or not the pinned conversion; run the models stage")
+    model=_blip_from_config(root)
+    model.load_state_dict(load_file(str(path),device="cpu"),strict=True)
+    return model
 
 def siglip_embed(spec,root,records,texts,image_batch=16,text_batch=64):
     import traceback
@@ -573,21 +640,15 @@ def siglip_embed(spec,root,records,texts,image_batch=16,text_batch=64):
         if torch.cuda.is_available():torch.cuda.empty_cache()
 
 class BlipWorkshop:
-    def __init__(self,root=None,device=None):
+    def __init__(self,root=None,device=None,spec=None):
         # Moved from a notebook cell: resolve the defaults at construction, after configure()/load_torch().
         root=model_root("blip") if root is None else root
         device=DEVICE if device is None else device
         self.root=Path(root)
         self.device=device
         self.processor=BlipProcessor.from_pretrained(str(root),local_files_only=True)
-        self.model=BlipForImageTextRetrieval.from_pretrained(
-            str(root),
-            local_files_only=True,
-            trust_remote_code=False,
-            use_safetensors=False,
-            weights_only=True,
-            dtype=torch.float32,
-        ).to(device).eval()
+        # Served from the pinned safetensors conversion (no pickle, no remote code), never pytorch_model.bin.
+        self.model=load_blip_converted(spec or BLIP,root).to(torch.float32).to(device).eval()
 
     def raw_image_embeds(self,records,batch_size=8):
         out=[]
@@ -1563,8 +1624,8 @@ def stage_flickr_sensitivity(args):
     test_texts,test_owners=gallery(test_records)
     blip=None;raw=None
     try:
-        # Same loader and weights_only path as the COCO BLIP; a separate process from every other model.
-        blip=BlipWorkshop(root=root)
+        # Same loader as the COCO BLIP (its own pinned safetensors conversion); a separate process from every other model.
+        blip=BlipWorkshop(root=root,spec=BLIP_FLICKR)
         raw,image_seconds=blip.raw_image_embeds(test_records)
         img=blip.image_features(raw)
         txt,text_seconds=blip.text_features(test_texts)
