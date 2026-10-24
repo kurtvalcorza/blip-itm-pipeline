@@ -218,6 +218,37 @@ runtime, not general estimates.
 Facts a reviewer should still weigh: the frozen model is already a competent retriever on VizWiz photographs — at the ceiling of a 70-photograph gallery (rsum 5.72 of 6), which is why the test gallery is 391 photographs — so the adaptation gain is a few recall points carried by the image → text direction (rsum 5.024 → 5.157 on the T4 run, i2t R@1 0.742 → 0.790, on the `text` photographs 0.732 → 0.801) while the ITM pair accuracy does not move (0.683); the T4 run reproduced the CPU pre-flight within 0.005 rsum (same seed; the hard-negative sampling is seeded too); the 40-photograph validation split saturates and selects the epoch weakly; four text-encoder blocks at 5e-5 for six epochs gained no more than the default in the build record; and the drawn grid re-scored after adaptation is one 3×3 grid of evidence about behaviour outside the corpus, not a measurement.
 
 
+## Workshop safetensors serving — 2026-10-24
+
+**2026-10-24 safetensors serving (workshop blob `a33f4e16`, code commit `2bbc85d`; this repository only).** Both BLIP ITM checkpoints (COCO and the Flickr sensitivity row) are now served from pinned safetensors conversions instead of `pytorch_model.bin`: after its size and SHA-256 check, each pickle is read once with `torch.load(weights_only=True)`, mapped onto the model built from the verified `config.json`, strict-loaded and written as `model.converted.safetensors` (COCO `44387f26…`, byte-identical to the E2E pipeline's served file; Flickr `1a9a322b…`); `BlipWorkshop` strict-loads that file. On CPU the converted models equal the pickle loads (472/472 tensors, identical ITM and ITC scores). Its STANDARD default path passed one hosted Colab CLI run on a fresh T4 on 2026-10-24 (commit `914c1a1`, PR #14; 37/37 code cells, 0 errors, 643.2 s; coarse R@1 equal to the 2026-10-15 run; index reload parity PASS; recorded below), so the earlier workshop runs are history for it (REL14); FULL, BYOD (REL12) and a browser run (REL2) remain open. The copy in `siglip2-vision-language-pipeline` is not changed by this revision, so the two entry points are no longer byte-identical until it is ported.
+
+### Colab CLI execution of the safetensors-serving workshop blob (`914c1a1`, blob `a33f4e16`) — 2026-10-24
+
+- **File:** [`execution-evidence/2026-10-24/DIMER_MultiModel_Vision_Language_Retrieval_Workshop_914c1a1_colab-cli-t4.ipynb`](execution-evidence/2026-10-24/DIMER_MultiModel_Vision_Language_Retrieval_Workshop_914c1a1_colab-cli-t4.ipynb) with its `_exec.log` and `_run_summary.json`. The fetched notebook's Git blob was checked against
+  `a33f4e1673f97a4bc5e06ea1e34bbb68c70fc69d` (PR #14 head `914c1a1`) before the session, and the executed notebook against
+  `run_summary.json`'s `executed_sha256` before any edit.
+- **Executor:** Colab CLI `colab exec -f` (scripted, not a browser Run all) on a fresh Colab Tesla T4, started
+  2026-10-24T11:00:03Z, wall 643.2 s, exit 0, input unchanged. Forms and uploads were not exercised.
+- **Result:** **PASSED** (STANDARD, default controls): 37/37 code cells, 0 errors. The completion summary printed
+  `full_adaptation: not run (STANDARD)`, `byod: not run`, `release_status: candidate` and "Vision-language retrieval workshop
+  complete. Interpret results as one-gallery sample-sanity evidence, not a universal model ranking."; "Full index
+  digest/shape/reload ranking parity: PASS"; report bundle 31 files, SHA-256 `fb400d9d…`.
+- **Test retrieval (389 photographs / 1,729 captions), coarse R@1 image→text / text→image:** SigLIP 2 0.7892 / 0.7212,
+  SigLIP v1 0.7815 / 0.7160, BLIP ITC (COCO) 0.7404 / 0.6524, BLIP ITC (Flickr30k, sensitivity) 0.6710 / 0.6056. ITM reranked
+  image→text R@1 from SigLIP 2 / SigLIP v1 / BLIP ITC candidates 0.8406 / 0.8329 / 0.8021. At three decimals these equal the
+  2026-10-15 run of blob `641d29c1` (0.789 / 0.721, 0.781 / 0.716, 0.740 / 0.652, 0.671 / 0.606; 0.841 / 0.833 / 0.802), so
+  serving both BLIP checkpoints from their safetensors conversions changed no printed retrieval number. The run prints no line
+  naming the served BLIP weight files; that they are the `model.converted.safetensors` conversions is read from the code.
+- **Local-path redaction.** Local paths were replaced by `<local-run-dir>/` before the first commit.
+
+| File (under `execution-evidence/2026-10-24/`) | Captured | Committed |
+|---|---|---|
+| `DIMER_MultiModel_Vision_Language_Retrieval_Workshop_914c1a1_colab-cli-t4.ipynb` | `eb78ab9a4bd7ae986c267de766d568533e78bc3827e2bb6602cd4c41b2f6db3e` | unchanged (no local path) |
+| `DIMER_MultiModel_Vision_Language_Retrieval_Workshop_914c1a1_colab-cli-t4_exec.log` | `efa4c06b2a3d9f0cc2cdd6e32ba1a5519dbe4c8f95a290dd76c15202a0c72160` | `d981754df096cacc03c7985f6f7752d424239bc072bd3ab810550d523aea6393` (2 replacements) |
+| `DIMER_MultiModel_Vision_Language_Retrieval_Workshop_914c1a1_colab-cli-t4_run_summary.json` | `7afcaa648d88c5aa57748d7bd844a52b858be57fadf46f56635db657b7ba68b1` | unchanged (no local path) |
+
+Status remains **Candidate**: FULL adaptation, BYOD and the rejected-archive path (REL12) and a browser run (REL2) are still required.
+
 ## Shared retrieval supplemental remediation evidence — 2026-09-26
 
 Applies only to `DIMER_MultiModel_Vision_Language_Retrieval_Workshop.ipynb`, identical executable cells in both repository entry points. Candidate remains; no real-model or hosted execution was performed here. Baseline BLIP:6 workshop+5 primary parity tests and validator passed. Baseline SigLIP2:5 primary parity tests passed; validator rejected the extra named supplemental notebook. The SigLIP2 validator now explicitly checks the named supplemental profile, standalone/candidate metadata, source syntax, saved errors and carried runtime policy while preserving strict primary parity and refusing unrelated extra notebooks.
