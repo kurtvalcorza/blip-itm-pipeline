@@ -123,6 +123,108 @@ BAD_NAME, BAD_BYTES, BAD_RULE, DISCARDED = "hostname", b"runtime\n", "BYOD_PATH 
 _UNUSED = types
 
 
+# ---- the catch is narrow: only bad input is refused; an internal TypeError/OSError keeps its traceback ------------
+
+
+def _run_section4(monkeypatch, tmp_path, byod_path: str, **overrides) -> dict:
+    """Execute Section 4 with BYOD on, in a namespace of the package API with `overrides` replacing helpers."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setitem(sys.modules, "google.colab", None)
+    ns: dict = {name: getattr(pkg, name) for name in pkg.__all__}
+    ns.update({"os": os, "Path": Path, **overrides})
+    exec(compile(refusing_section4_source(byod_path), "<section 4>", "exec"), ns)
+    return ns
+
+
+def _one_refused_line(exc: BaseException) -> str:
+    assert getattr(exc, "dimer_refusal", False) is True, repr(exc)
+    lines = exc._render_traceback_()
+    assert len(lines) == 1 and lines[0].startswith("Refused: ") and "Traceback" not in lines[0], lines
+    return lines[0]
+
+
+def test_the_byod_catch_is_narrow_in_the_notebook_source():
+    src = CELLS[SEC4].split("write_dataset_jsonl(", 1)[0]  # the BYOD try block; the probes below it are a separate demo
+    assert "except (TypeError" not in src and "except TypeError" not in src
+    assert src.count("except (OSError, zipfile.BadZipFile) as exc:") == 2 and src.count("except OSError as exc:") == 1
+    assert "try:\n                    payload = source.read_bytes()\n                    extract_zip(payload, byod_root, file_name)\n                except (OSError, zipfile.BadZipFile) as exc:\n" in src
+    assert "try:\n                extract_zip(payload, byod_root, file_name)\n            except (OSError, zipfile.BadZipFile) as exc:\n" in src
+    assert "try:\n            records = load_byod_dataset(records_file)\n        except OSError as exc:\n" in src
+    assert "\nexcept ValueError as exc:\n    if not USE_BYOD:\n        raise" in src
+
+
+def test_a_corrupt_zip_member_is_still_one_refused_line(monkeypatch, tmp_path):
+    import io
+    import zipfile
+
+    records = _records(tmp_path / "src", 12)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_STORED) as archive:
+        archive.writestr("records.jsonl", "\n".join(json.dumps(r) for r in records))
+        for r in records:
+            archive.write(tmp_path / "src" / r["image"], r["image"])
+    payload = bytearray(buffer.getvalue())
+    payload[payload.index(b"\xff\xd8\xff") + 200] ^= 0xFF  # flip one byte inside the first stored JPEG: its CRC-32 no longer matches
+    path = tmp_path / "corrupt.zip"
+    path.write_bytes(bytes(payload))
+    with pytest.raises(ValueError) as info:
+        _run_section4(monkeypatch, tmp_path, str(path))
+    line = _one_refused_line(info.value)
+    assert line.startswith("Refused: corrupt.zip: the zip cannot be read (BadZipFile: Bad CRC-32"), line
+    assert line.endswith("Fix the file, then select this cell and choose Runtime → Run after."), line
+
+
+def test_an_unreadable_records_file_is_still_one_refused_line(monkeypatch, tmp_path):
+    path = tmp_path / "locked.zip"
+    path.write_bytes(_zip(tmp_path, "locked", 12))
+
+    def unreadable(_path):
+        raise PermissionError(13, "Permission denied", str(_path))
+
+    with pytest.raises(ValueError) as info:
+        _run_section4(monkeypatch, tmp_path, str(path), load_byod_dataset=unreadable)
+    line = _one_refused_line(info.value)
+    assert line.startswith("Refused: locked.zip: the records file cannot be read (PermissionError: "), line
+
+
+@pytest.mark.parametrize("error", [TypeError("internal helper bug"), OSError("internal I/O bug")], ids=["TypeError", "OSError"])
+def test_an_internal_error_after_the_loader_keeps_its_traceback_and_clears_nothing(monkeypatch, tmp_path, error):
+    import traceback
+
+    path = tmp_path / "ok.zip"
+    path.write_bytes(_zip(tmp_path, "ok", 12))
+    (tmp_path / "outputs").mkdir()
+    earlier = tmp_path / "outputs" / f"{STEM}_earlier.json"
+    earlier.write_text("{}", encoding="utf-8")
+
+    def broken_disjoint(splits):
+        raise error
+
+    ns: dict = {"train_records": "old"}
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setitem(sys.modules, "google.colab", None)
+    ns.update({name: getattr(pkg, name) for name in pkg.__all__})
+    ns.update({"os": os, "Path": Path, "check_split_disjoint": broken_disjoint})
+    with pytest.raises(type(error)) as info:
+        exec(compile(refusing_section4_source(str(path)), "<section 4>", "exec"), ns)
+    assert info.value is error and not getattr(info.value, "dimer_refusal", False)
+    rendered = "".join(traceback.format_exception(info.value))
+    assert rendered.startswith("Traceback") and "broken_disjoint" in rendered and "Refused:" not in rendered
+    assert ns["train_records"] == "old" and earlier.exists()  # nothing is cleared for an internal error
+
+
+def test_a_typeerror_inside_the_loader_is_not_turned_into_a_refusal(monkeypatch, tmp_path):
+    path = tmp_path / "ok.zip"
+    path.write_bytes(_zip(tmp_path, "ok", 12))
+
+    def buggy_loader(_path):
+        raise TypeError("loader bug")
+
+    with pytest.raises(TypeError, match="loader bug") as info:
+        _run_section4(monkeypatch, tmp_path, str(path), load_byod_dataset=buggy_loader)
+    assert not getattr(info.value, "dimer_refusal", False)
+
+
 # ---- the router: a refusal crosses the worker boundary as one line; a genuine error keeps its traceback -----
 
 
