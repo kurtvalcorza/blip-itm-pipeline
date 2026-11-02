@@ -89,7 +89,7 @@ def test_lock_file_pins_every_requirement_with_hashes():
         assert re.search(r"--hash=sha256:[0-9a-f]{64}", block), name
     pins = dict(re.findall(r"^([A-Za-z0-9_.-]+)==(\S+)", text, re.M))
     expected = {"torch": "2.14.0", "torchvision": "0.29.0", "torchaudio": "2.11.0", "transformers": "4.57.6",
-                "huggingface-hub": "0.36.2", "safetensors": "0.8.0", "numpy": "2.1.3", "pillow": "11.3.0",
+                "huggingface-hub": "0.36.2", "safetensors": "0.8.0", "numpy": "2.1.3", "pillow": "13.0.0",
                 "pyarrow": "25.0.1", "pandas": "2.2.3", "matplotlib": "3.10.8", "sentencepiece": "0.2.1",
                 "protobuf": "6.33.5"}
     assert {k: pins.get(k) for k in expected} == expected
